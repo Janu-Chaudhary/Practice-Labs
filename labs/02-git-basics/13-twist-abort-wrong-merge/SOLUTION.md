@@ -17,9 +17,19 @@ cat requirements.txt
 #   =======
 #   pytest==8.2.0
 #   >>>>>>> feature
-code requirements.txt            # delete ONLY the 3 marker lines, keep both dependency lines, save
-#   no-editor equivalent:
-#   printf 'flask==3.0.0\nrequests==2.31.0\ngunicorn==22.0.0\npytest==8.2.0\n' > requirements.txt
+```
+
+Editor: open `requirements.txt` in the Files panel. Delete ONLY the 3 marker lines, keep both
+dependency lines, save with Ctrl+S. The file must end up exactly:
+```
+flask==3.0.0
+requests==2.31.0
+gunicorn==22.0.0
+pytest==8.2.0
+```
+
+Back in the terminal:
+```bash
 grep -n '<<<<<<<\|=======\|>>>>>>>' requirements.txt   # no output = markers gone
 git add requirements.txt         # mark resolved
 git commit --no-edit             # finish the merge with git's own message

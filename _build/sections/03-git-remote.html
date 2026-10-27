@@ -170,9 +170,9 @@ GET /health
 =======
 GET /search
 &gt;&gt;&gt;&gt;&gt;&gt;&gt; 68f0b35 (Add search endpoint)   <span class="c"># your commit being replayed</span>
-<span class="p">$</span> code routes.txt                <span class="c"># keep what's needed, delete the 3 marker lines</span>
+<span class="c"># Files panel: open routes.txt, keep what's needed, delete the 3 marker lines, Ctrl+S</span>
 <span class="p">$</span> git add routes.txt
-<span class="p">$</span> git rebase --continue          <span class="c"># opens the editor with the message: save + close</span>
+<span class="p">$</span> git rebase --continue          <span class="c"># opens a terminal editor with the message: vim :wq Enter</span>
 Successfully rebased and updated refs/heads/main.</pre>
   <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
     <tr><td><code>git rebase --continue</code></td><td>after <code>git add</code>-ing the fixed files: make this commit and go on</td></tr>
@@ -267,7 +267,8 @@ cfc90e8 Remove env file
 677777a Add config loader
 <span class="p">$</span> git show 677777a:.env
 DB_PASSWORD=Summer2024!
-<span class="p">$</span> echo ".env" &gt;&gt; .gitignore &amp;&amp; git add .gitignore &amp;&amp; git commit -m "Ignore .env"</pre>
+<span class="c"># Files panel: + New file -> .gitignore, type the line  .env  then Ctrl+S</span>
+<span class="p">$</span> git add .gitignore &amp;&amp; git commit -m "Ignore .env"</pre>
   <div class="callout why"><strong>Why rotate</strong><p>Once pushed, assume it's copied (forks, clones, scanners find it in minutes). The fix that works is <b>rotate</b>: change the password where it's used so the leaked one is dead. Rewriting history afterwards is clean-up, not a fix. Prevent it with <code>.gitignore</code> + a committed <code>.env.example</code>. Note: <code>.gitignore</code> doesn't affect files git already tracks (untrack with <code>git rm --cached .env</code>).</p></div>
 
   <!-- ============ SCENARIOS ============ -->
@@ -347,9 +348,9 @@ error: commit 2ceabd1... is a merge but no -m option was given.
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git status
 interactive rebase in progress; onto 9f8e7d6
 You are currently rebasing branch 'main' on '9f8e7d6'.
-<span class="p">$</span> code routes.txt                 <span class="c"># remove &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;, keep both lines</span>
+<span class="c"># Files panel: open routes.txt, remove &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;, keep both lines, Ctrl+S</span>
 <span class="p">$</span> git add routes.txt
-<span class="p">$</span> git rebase --continue           <span class="c"># editor opens for the message: save + close</span>
+<span class="p">$</span> git rebase --continue           <span class="c"># a terminal editor opens for the message: vim :wq Enter</span>
 <span class="c"># or give up completely:</span>
 <span class="p">$</span> git rebase --abort              <span class="c"># main back exactly as before the rebase</span></pre><p>(a) No branch: HEAD is detached while the rebase replays commits; main moves only at the end. (b) fix + <code>git add</code> + <code>--continue</code> (repeat for each commit that conflicts), or <code>--abort</code>. (c) During a rebase <code>HEAD</code> = the commit you are replaying <b>onto</b> (origin's side); the bottom part is <b>your</b> commit. That's the reverse of a merge. Don't run <code>git commit</code> in the middle; use <code>--continue</code>.</p></details>
     </div></details>

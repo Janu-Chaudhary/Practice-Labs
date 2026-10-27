@@ -1,8 +1,15 @@
 # Solution - 03 redirects and pipes
 
+Step 1 is done in the editor: in the Files panel click **+ New file**, type `hello.txt`, type these two
+lines, then save with Ctrl+S. Why the editor: this is text you type yourself, not the output of a command.
+```
+first line
+second line
+```
+
+Then in the terminal:
 ```bash
-echo "first line" > hello.txt          # > creates the file (or wipes it) and writes one line
-echo "second line" >> hello.txt        # >> appends: the first line survives
+cat hello.txt                          # check: the two lines are there (if not, you forgot to save)
 head -n 3 visitors.txt > top3.txt      # head -n N = first N lines (tail -n N = last N)
 wc -l < visitors.txt > line-count.txt  # < feeds the file as input, so wc doesn't know (or print) its name
 sort visitors.txt | uniq > unique.txt  # sort puts duplicates next to each other, then uniq drops the repeats
@@ -13,8 +20,7 @@ cat hello.txt top3.txt line-count.txt unique.txt
 `cat visitors.txt | wc -l > line-count.txt` is also correct.
 
 ## Common wrong attempts
-- Using `>` for the second echo -> `hello.txt` holds only `second line`. `>` always starts the file from empty.
+- Forgetting Ctrl+S in the editor -> `hello.txt` is empty on disk (`cat hello.txt` shows nothing). The editor shows `● unsaved` until you save.
 - `uniq visitors.txt > unique.txt` (no sort) -> duplicates stay, because the two `maya` lines are not next to each other.
 - `wc -l visitors.txt > line-count.txt` -> file holds `8 visitors.txt`, not just the number.
 - `sort visitors.txt > visitors.txt` -> visitors.txt becomes **empty**: the shell truncates the `>` target before sort reads it.
-- `echo first line second line > hello.txt` -> one line `first line second line`. Each `echo` writes one line.

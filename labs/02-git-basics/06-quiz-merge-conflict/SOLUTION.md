@@ -8,17 +8,26 @@ git merge feature
 #   CONFLICT (content): Merge conflict in greet.py
 #   Automatic merge failed; fix conflicts and then commit the result.
 git status                  # "You have unmerged paths." / both modified: greet.py
-code greet.py               # file now looks like:
-#   def greet(name):
-#   <<<<<<< HEAD
-#       return f"Hello, {name}! Welcome back."
-#   =======
-#       return f"Hi there, {name}."
-#   >>>>>>> feature
-#   Delete ALL three marker lines and both versions; write the wanted line:
-#       return f"Hi there, {name}! Welcome back."      then SAVE
-#   no-editor equivalent:
-#   printf 'def greet(name):\n    return f"Hi there, {name}! Welcome back."\n' > greet.py
+```
+
+Editor: open `greet.py` in the Files panel. It now looks like this:
+```
+def greet(name):
+<<<<<<< HEAD
+    return f"Hello, {name}! Welcome back."
+=======
+    return f"Hi there, {name}."
+>>>>>>> feature
+```
+Delete ALL three marker lines and both old versions, and write the wanted line. Save with Ctrl+S.
+The file must end up exactly:
+```python
+def greet(name):
+    return f"Hi there, {name}! Welcome back."
+```
+
+Back in the terminal:
+```bash
 grep -n '<<<<<<<\|=======\|>>>>>>>' greet.py   # prints nothing = no markers left
 git add greet.py            # "add" = mark as resolved
 git commit --no-edit        # finish the merge with git's message "Merge branch 'feature'"

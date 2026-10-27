@@ -21,7 +21,7 @@ There is no `reports` folder yet.
 
 ## Stop
 - Don't change `data/orders.csv`.
-- Create the reports with commands and `>` (no editor, and don't type the numbers in yourself).
+- Create the reports with commands and `>`. Don't write them in the editor, and don't type the numbers in yourself.
 
 ## Hints
 - `cut -d, -f2` = split each line on `,` and keep field 2. Without `-d,` cut splits on TAB.

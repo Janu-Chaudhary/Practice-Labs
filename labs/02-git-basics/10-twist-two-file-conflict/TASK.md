@@ -11,7 +11,7 @@ Both branches changed greet.py's return line and config.py's PORT line. feature 
 
 ## Task
 1. Merge feature into main.
-2. Resolve so that:
+2. Resolve so that (edit greet.py in the Files panel and save with Ctrl+S):
    - greet.py is exactly
      ```python
      def greet(name):

@@ -4,7 +4,15 @@
 git remote add origin remote.git     # "origin" is just a nickname for this URL/path
 git remote -v                        # shows origin remote.git (fetch) and (push)
 git push -u origin main              # send main; -u remembers origin/main as main's upstream
-echo "# Docs" > docs.md
+```
+
+Editor: Files panel -> **+ New file** -> `docs.md`, type any content, save with Ctrl+S. For example:
+```
+# Docs
+```
+
+```bash
+git status                           # docs.md is untracked: git doesn't know it yet
 git add docs.md
 git commit -m "Add docs"
 git push                             # works with no arguments because of -u
@@ -20,3 +28,5 @@ Common wrong attempts
 - `git remote add origin` twice -> `error: remote origin already exists`. Fix a wrong URL with
   `git remote set-url origin remote.git`, or `git remote remove origin` and add again.
 - Forgetting `git add docs.md` -> commit says "nothing added to commit", push sends nothing new.
+- Creating the file but not saving it -> it is empty on disk. That still commits (any content is OK
+  here), but get used to Ctrl+S before every `git add`.

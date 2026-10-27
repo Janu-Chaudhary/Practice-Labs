@@ -327,7 +327,9 @@ async function openFile(p,silent){
 }
 function closeFile(){openPath=null;dirty=false;const ed=$('#editor');ed.value='';ed.disabled=true;$('#fname').textContent='No file open';$('#saveBtn').disabled=true;setState();setNotice('');}
 function setState(){const s=$('#fstate');s.textContent=openPath?(dirty?'● unsaved':'saved'):'';s.className='state'+(dirty?' dirty':'');}
-async function save(){if(!openPath)return;const r=await api('/api/file',{path:openPath,text:$('#editor').value});
+// like most code editors, end a non-empty file with a newline (git and the checks expect one)
+async function save(){if(!openPath)return;let text=$('#editor').value;if(text&&!text.endsWith('\n'))text+='\n';
+  const r=await api('/api/file',{path:openPath,text});
   if(r.error){toast(r.error);return;}openMtime=r.mtime;dirty=false;setState();setNotice('');toast('Saved '+openPath);}
 $('#editor').addEventListener('input',()=>{dirty=true;setState();});
 $('#editor').addEventListener('keydown',e=>{

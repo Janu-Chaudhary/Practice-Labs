@@ -13,4 +13,4 @@ printf '%s\n' \
   '2026-10-25T08:04:00 level=INFO service=api msg="request ok"' \
   > logs/app.log
 printf '%s\n' "On-call notes" "2026-10-24 checked by Sam" > notes.txt
-banner "07 report and backup (Quiz-style): -E, -c, cp into new folder, >> to append"
+banner "07 report and backup (Quiz-style): -E, -c, cp into new folder, add a note in the editor"

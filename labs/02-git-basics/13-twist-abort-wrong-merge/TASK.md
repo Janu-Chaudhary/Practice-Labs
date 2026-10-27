@@ -29,7 +29,8 @@ Both lines were added at the same spot, so git can't pick: **both** must be kept
 ## Task
 1. Cancel the teammate's merge so main is back to "Add gunicorn, bump to v2" with nothing in progress.
 2. Merge `feature` into main.
-3. Resolve the conflict so requirements.txt is exactly (main's line first, then feature's):
+3. Resolve the conflict: open `requirements.txt` in the Files panel and make it exactly this
+   (main's line first, then feature's), then save with Ctrl+S:
    ```
    flask==3.0.0
    requests==2.31.0

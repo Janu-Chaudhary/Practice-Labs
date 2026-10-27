@@ -21,14 +21,15 @@ way, feature changed the same line differently. Nothing is staged, no merge in p
 
 ## Task
 1. Merge feature into main.
-2. Resolve the conflict (in your editor) so greet.py is exactly this, with no conflict markers left:
+2. Resolve the conflict: open `greet.py` in the Files panel, remove the conflict markers and make the
+   file exactly this, then save with Ctrl+S:
    ```python
    def greet(name):
        return f"Hi there, {name}! Welcome back."
    ```
 3. Finish the merge by committing it with no message (git uses its own merge message) or with `-m "..."`.
 
-Hint: `git commit` with no `-m` OPENS AN EDITOR (often vim). In vim type `:wq` then Enter.
+Hint: `git commit` with no `-m` OPENS AN EDITOR **in the terminal** (often vim). In vim type `:wq` then Enter.
 In nano press Ctrl+O, Enter, Ctrl+X. Or skip the editor: `git commit --no-edit`.
 
 ## Stop

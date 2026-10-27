@@ -83,16 +83,18 @@ drwxr-xr-x 2 student student 4096 Sep 28 09:00 logs
     <tr><td><code>cmd &gt;&gt; f</code></td><td>add output to the <b>end</b> of f (creates it if missing). Keeps what was there</td></tr>
     <tr><td><code>cmd &lt; f</code></td><td>feed file f as the input</td></tr>
     <tr><td><code>cmd1 | cmd2</code></td><td>pipe: cmd1's output becomes cmd2's input. No file in between</td></tr>
-    <tr><td><code>echo "text" &gt; f</code></td><td>write one line. <code>echo</code> just prints its arguments + a newline</td></tr>
+    <tr><td><code>echo "text"</code></td><td>just prints its arguments + a newline. Useful to save a value a command worked out, e.g. <code>echo $? &gt; code.txt</code> (see exit codes below)</td></tr>
   </tbody></table>
-  <pre class="term"><span class="p">$</span> echo "first line" &gt; hello.txt
-<span class="p">$</span> echo "second line" &gt;&gt; hello.txt
-<span class="p">$</span> cat hello.txt
-first line
-second line
-<span class="p">$</span> echo "oops" &gt; hello.txt     <span class="c"># &gt; starts from empty again</span>
-<span class="p">$</span> cat hello.txt
-oops</pre>
+  <pre class="term"><span class="p">$</span> head -n 2 visitors.txt &gt; some.txt    <span class="c"># first 2 lines into a new file</span>
+<span class="p">$</span> tail -n 1 visitors.txt &gt;&gt; some.txt   <span class="c"># &gt;&gt; adds the last line at the end</span>
+<span class="p">$</span> cat some.txt
+maya
+liam
+ben
+<span class="p">$</span> tail -n 1 visitors.txt &gt; some.txt    <span class="c"># &gt; starts from empty again</span>
+<span class="p">$</span> cat some.txt
+ben</pre>
+  <div class="callout tip"><strong>Terminal or editor?</strong><p>Rule of thumb: content <b>produced by a command</b> (grep, sort, wc, ls ...) is saved with <code>&gt;</code> / <code>&gt;&gt;</code> in the terminal. Text <b>you type yourself</b> (a note, a config line, a new file) goes in the editor: in the Files panel open the file, or click <b>+ New file</b> and type a path like <code>notes/todo.txt</code> (folders are created), then save with <code>Ctrl+S</code>. The quiz portal works the same way.</p></div>
   <p><b>Quoting.</b> The shell splits your line on spaces and treats <code>| &gt; &lt; * $</code> as special. Put patterns in <b>single quotes</b>
   (<code>'method=(GET|DELETE)'</code>) so the shell passes them to grep untouched. Double quotes also protect spaces and <code>|</code> but still expand <code>$var</code>.</p>
   <div class="callout why"><strong>Why "redirect into a missing folder" fails</strong><p>
@@ -238,7 +240,9 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Back up a folder and add a note</summary>
     <div class="body"><p>Copy the whole <code>config</code> folder to <code>config-backup</code>, then add the line <code>backup done</code> to the end of <code>CHANGELOG.txt</code> without losing its lines.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cp -r config config-backup
-<span class="p">$</span> echo "backup done" &gt;&gt; CHANGELOG.txt</pre><p>Folders need <code>cp -r</code> (else <code>-r not specified; omitting directory</code>). <code>&gt;&gt;</code> appends, <code>&gt;</code> would wipe the changelog.</p></details>
+<span class="c"># Files panel: open CHANGELOG.txt, add a new last line, save with Ctrl+S:</span>
+<span class="c">#   backup done</span>
+<span class="p">$</span> tail -n 2 CHANGELOG.txt     <span class="c"># check: the old last line, then "backup done"</span></pre><p>Folders need <code>cp -r</code> (else <code>-r not specified; omitting directory</code>). The note is text you type, so it goes in the editor; keep the old lines and only add one at the end.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Which users hit the API most?</summary>
@@ -289,7 +293,7 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
     <li><label><input type="checkbox" data-id="shell-02"> <code>labs/01-shell/02-grep-basics</code>
       <span>grep -i, -c, -v, -n into files with &gt;</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-03"> <code>labs/01-shell/03-redirects-and-pipes</code>
-      <span>echo &gt; vs &gt;&gt;, head, wc -l &lt; file, sort | uniq</span> <span class="lvl drill">Drill</span></label></li>
+      <span>new file in the editor, head, wc -l &lt; file, sort | uniq</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-04"> <code>labs/01-shell/04-grep-combine</code>
       <span>AND with a pipe, OR with -E, -h across two files, -w</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-05"> <code>labs/01-shell/05-quiz-orders-500</code>
@@ -297,7 +301,7 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
     <li><label><input type="checkbox" data-id="shell-06"> <code>labs/01-shell/06-quiz-payments-three-logs</code>
       <span>Three rotated logs oldest first, 503ms trap, mkdir -p nested archive</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="shell-07"> <code>labs/01-shell/07-quiz-report-and-backup</code>
-      <span>WARN|ERROR report, error count, cp into new folder, append a note</span> <span class="lvl quiz">Quiz-style</span></label></li>
+      <span>WARN|ERROR report, error count, cp into new folder, add a note in the editor</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="shell-08"> <code>labs/01-shell/08-twist-failures-per-service</code>
       <span>Count 5xx per service with grep | cut | sort | uniq -c, pick the top</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="shell-09"> <code>labs/01-shell/09-twist-dated-folders</code>

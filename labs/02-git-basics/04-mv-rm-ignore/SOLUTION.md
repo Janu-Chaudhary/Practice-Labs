@@ -4,7 +4,15 @@
 git mv utils.py helpers.py        # rename on disk AND stage the rename in one go
 git rm old_notes.txt              # delete on disk AND stage the deletion
 git rm --cached .env              # remove from the staging area only; file stays on disk
-echo '.env' > .gitignore          # future git add . will skip it
+```
+
+Editor: Files panel -> **+ New file** -> `.gitignore`, type the line below, save with Ctrl+S.
+Why: a future `git add .` will skip `.env`.
+```
+.env
+```
+
+```bash
 git add .gitignore
 git status                        # renamed / deleted / deleted(.env) / new file .gitignore
 git commit -m "Tidy repository"
