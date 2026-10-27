@@ -1,36 +1,37 @@
-# 11 - A migration failed halfway: clean up, repair, migrate (Quiz-style)
+# 11 - A migration failed halfway: make it re-runnable, repair, migrate (Quiz-style)
 
 **Situation.** Course naming (`NN_name.up.sql` / `.down.sql`). `shop.db` has 01 applied and 3 orders.
-A teammate wrote `02_add_total_paise.up.sql`, a three-step **backfill** migration:
-add a column `total_paise`, fill it with `total * 100`, then index it.
-02 has a script config file `02_add_total_paise.up.sql.conf` with `executeInTransaction=false`
+A teammate wrote `02_create_coupons.up.sql`, a three-step migration:
+create the `coupons` table, insert two starter coupons, then index it.
+02 has a script config file `02_create_coupons.up.sql.conf` with `executeInTransaction=false`
 (the team wanted to see how Flyway behaves on a database like MySQL, where DDL can't be rolled back).
 
 The deploy ran `flyway migrate` and it **failed on the last statement** (a typo). Because there was no
-transaction, the first two statements stayed committed, and Flyway wrote a **Failed** row into the history table.
+transaction, the first two statements stayed committed: the table and its 2 rows are in `shop.db`.
+Flyway wrote a **Failed** row into the history table.
 
 **Task** (inside `work/`):
 1. `flyway info`: what state is 02 in? `flyway migrate`: read the validate error (it tells you the plan).
-2. Find out exactly what the failed run left behind: look at the `orders` table (columns and rows) and the
-   history table with sqlite3.
-3. Fix the typo in `02_add_total_paise.up.sql`. (Allowed: 02 never succeeded anywhere, so no database
-   has a good checksum for it yet.)
-4. Remove the half-completed change by hand, clear the failed row the Flyway way, then `flyway migrate`
-   so 02 runs **completely** from the start.
+2. Open `migrations/02_create_coupons.up.sql` in the Files panel and find the typo.
+3. Think before you fix: when 02 runs again, it starts from line 1. But the table and the 2 coupons
+   already exist. You may only change the database **through Flyway**, so make 02 **safe to re-run**:
+   every statement must work whether or not its part was already done. Fix the typo too.
+   Save with **Ctrl+S**. (Editing 02 is allowed: it never succeeded anywhere, so no database has a good
+   checksum for it yet.)
+4. Clear the Failed row the Flyway way, then `flyway migrate` so 02 completes.
 5. `flyway info` shows 01 and 02 Success; `flyway migrate` again says up to date.
 
 **Stop:** don't delete `shop.db` or any orders; don't edit 01; don't delete the `.conf` file or remove
-statements from 02 (other databases still need all three steps); don't delete history rows with SQL
-(use the Flyway command that does it).
+statements from 02 (a fresh database still needs all three steps); don't change the database outside Flyway.
 
 **Hints**
-- `sqlite3 -header -column shop.db "SELECT * FROM flyway_schema_history;"` - look at the `success` column.
-- `sqlite3 -header -column shop.db "SELECT * FROM orders;"` - is there already a `total_paise` column? Is it filled?
-- `total_paise` only holds data copied from `total`, so dropping it loses nothing. 02's down file shows how.
-- Which order? If you clear the failed row but forget the half-completed change, the next migrate fails
-  again (on a different statement) and writes a NEW failed row.
+- SQLite has "skip if it is already there" forms: `CREATE TABLE IF NOT EXISTS ...`,
+  `INSERT OR IGNORE INTO ...` (skips rows whose PRIMARY KEY exists), `CREATE INDEX IF NOT EXISTS ...`.
+- Which order? If you clear the failed row but 02 is not re-runnable, the next migrate fails again
+  (`table coupons already exists`) and writes a NEW Failed row. Just fix 02 and repair again.
 
 **What will be checked**
-- 02 still has all three steps and the index now targets `orders`; 01 and the `.conf` file unchanged
+- 02 still has all three steps and the index now targets `coupons`; 01 and the `.conf` file unchanged
 - history: no failed rows, exactly one 02 row and it is Success; `flyway validate` passes
-- orders keeps 3 rows with `total_paise = total * 100`; the column exists once; the index is on `orders`
+- coupons has exactly the 2 coupons (no duplicates) and the index; orders keeps 3 rows
+- the checker migrates a brand-new empty database with your files: it must get coupons too

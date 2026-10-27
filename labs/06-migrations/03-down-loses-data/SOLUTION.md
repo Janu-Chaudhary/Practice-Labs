@@ -2,25 +2,45 @@
 
 ```bash
 cd work
-flyway info                                         # 01 Success, 02 Success
-sqlite3 -header -column shop.db "SELECT * FROM users;"   # id user_name  (no bio)
-sqlite3 shop.db < migrations/02_drop_bio.down.sql   # runs: ALTER TABLE users ADD COLUMN bio text;
-sqlite3 -header -column shop.db "SELECT * FROM users;"   # bio is empty (NULL) for Asha and Ravi
-sqlite3 shop.db "DELETE FROM flyway_schema_history WHERE version = '02';"   # history now matches the schema
-flyway info                                         # 02 Pending
+flyway info                              # 01 Success, 02 Success. No .down.sql rows: Flyway ignores them
+cat migrations/02_drop_bio.down.sql      # ALTER TABLE users ADD COLUMN bio text;
 ```
+In the Files panel click **+ New file**, type `migrations/03_restore_bio.up.sql`, write:
+```sql
+ALTER TABLE users ADD COLUMN bio TEXT;
+```
+Save with **Ctrl+S**. Then **+ New file** `migrations/03_restore_bio.down.sql`:
+```sql
+ALTER TABLE users DROP COLUMN bio;
+```
+Save with **Ctrl+S**.
+```bash
+flyway info                              # 03 Pending
+flyway migrate                           # Migrating schema "main" to version "03 - restore bio"
+flyway info                              # 01, 02, 03 Success
+```
+**+ New file** `answer.txt`:
+```
+NULL
+```
+Save with **Ctrl+S**.
 
-**Why NULL?** The down file is *new SQL* that runs after the drop committed. `ADD COLUMN bio text`
-makes an empty column with the right name and type. The old values were deleted by the up migration and
-are not stored anywhere (not in the history table either - it only stores version, file name, checksum).
+**Why NULL?** The reverse SQL is *new SQL* that runs after the drop committed. `ADD COLUMN bio TEXT`
+makes an empty column with the right name and type. The old values were deleted by 02 and are not stored
+anywhere (not in the history table either: it only stores version, script name, checksum, who and when).
 Only a **backup restore** gets them back. ROLLBACK can't help: the drop was committed long ago.
+It is the same whether you run `02_drop_bio.down.sql` with an undo tool or roll forward with 03.
 
-Why delete the history row? The history table must describe what is really in the database.
-After the down, 02 is no longer applied; if the row stayed, Flyway would think bio is gone.
-Tools with built-in down support (`migrate down`, Flyway Teams `undo`) do both steps in one go.
+**Why roll forward and not "undo 02"?** Flyway free has no undo command. Rolling forward keeps the history
+table honest: it says 01, 02, 03 ran, which is exactly what happened. Every other database (CI, production)
+gets the same three steps in the same order. Tools with built-in down support (`migrate down`, Flyway
+Teams `undo`) run the down file and remove the history row for you, but the data is still gone.
+
+**Why a down file for 03?** Every migration gets its reverse, so 03 can be undone later by a tool or a person.
 
 **Common wrong attempts**
-- `sqlite3 shop.db migrations/02_drop_bio.down.sql` (no `<`) - sqlite treats the file name as SQL -> syntax error.
-- `DELETE ... WHERE version = 02` (no quotes) - SQLite compares text '02' with number 2 -> deletes nothing.
-- Running `flyway migrate` after deleting the row - 02 runs again and drops bio again.
-- Using `flyway repair` - repair does not remove successful rows; it only fixes checksums / failed rows.
+- Editing `02_drop_bio.up.sql` (e.g. deleting the DROP) -> checksum mismatch for 02 (lab 07), and bio is
+  still not back.
+- `03_restore_bio.sql` (no `.up`) -> not a migration in this project; `flyway info` does not list it.
+- `03-restore-bio.up.sql` -> `Invalid ... name` error: the separator is `_`.
+- `answer.txt` = `Likes chess` -> that is what a backup restore would give, not a reverse migration.

@@ -13,7 +13,8 @@ Two files with **lower** timestamps have just appeared:
 Both are lower than 202610251200, which is already applied, so Flyway refuses to migrate.
 
 **Task** (inside `work/`):
-1. Run `flyway info`. Write the **State** it shows for the two late files (one word) into `answer.txt`.
+1. Run `flyway info`. Write the **State** it shows for the two late files (one word) into `answer.txt`
+   (Files panel: **+ New file**, type `answer.txt`, write the word, save with **Ctrl+S**).
    Run `flyway migrate` and read the error.
 2. Decide per file:
    - The hotfix must keep its version (production's history table already has 202610221500).
@@ -30,7 +31,7 @@ before** you run anything with outOfOrder (otherwise your old version gets appli
   then `git add`.
 - Flags go after the command: `flyway migrate -outOfOrder=true`.
 - `flyway info` shows a migration applied out of order with its own state name - look for it.
-- History order: `SELECT installed_rank, version, script FROM flyway_schema_history ORDER BY installed_rank;`
+- `flyway info` lists applied migrations in the order they **ran** (see `Installed On`), not by version.
 
 **What will be checked**
 - `answer.txt` = the state word; hotfix files unchanged with the same name; notes files renamed to 202610271100

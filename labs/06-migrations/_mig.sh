@@ -16,7 +16,7 @@ locations = ["filesystem:migrations"] # where the migration files live
 # Course naming: 03_add_currency.up.sql  ->  version 03, description "add currency"
 sqlMigrationPrefix = ""               # no "V" in front
 sqlMigrationSeparator = "_"           # first "_" splits version from description
-sqlMigrationSuffixes = [".up.sql"]    # only .up.sql files are migrations (.down.sql are run by hand)
+sqlMigrationSuffixes = [".up.sql"]    # only .up.sql files are migrations (Flyway never runs .down.sql)
 validateMigrationNaming = true        # a badly named .up.sql is an error, not silently skipped
 T
 }
