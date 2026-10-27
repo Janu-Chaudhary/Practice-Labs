@@ -22,7 +22,8 @@
 
   <h3 class="sub" id="start-tool">The Lab Practice Tool (quiz-style screen)</h3>
   <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
-  <pre class="term"><span class="p">$</span> ~/Desktop/csp/practice/start-lab-tool.sh
+  <pre class="term"><span class="p">$</span> cd Practice-Labs         <span class="c"># the folder you cloned (wherever it lives)</span>
+<span class="p">$</span> ./start-lab-tool.sh
 <span class="c"># opens http://127.0.0.1:8765 in your browser. Leave this terminal open; Ctrl+C stops the tool.</span></pre>
   <ol class="steps">
     <li>Pick a lab on the left. Its <code>work/</code> folder is built automatically the first time.</li>
@@ -42,7 +43,7 @@
     <div class="card"><h4><code>check.sh</code></h4>Grades your <code>work/</code> folder with ✓ / ✗ per check, like the quiz's "What was checked".</div>
     <div class="card"><h4><code>SOLUTION.md</code></h4>The exact commands with a why for each, and common wrong attempts. Open it only after trying.</div>
   </div>
-  <pre class="term"><span class="p">$</span> cd ~/Desktop/csp/practice/labs/01-shell/01-files-and-folders
+  <pre class="term"><span class="p">$</span> cd labs/01-shell/01-files-and-folders   <span class="c"># from the Practice-Labs folder</span>
 <span class="p">$</span> cat TASK.md            <span class="c"># or: code TASK.md  (opens in VS Code)</span>
 <span class="p">$</span> ./setup.sh             <span class="c"># builds work/ fresh</span>
 <span class="p">$</span> cd work                <span class="c"># you solve the task in here</span>
@@ -66,10 +67,11 @@
 <span class="c"># 2. Optional: use nano instead of vim when git opens an editor</span>
 <span class="p">$</span> git config --global core.editor nano
 
-<span class="c"># 3. Topic 6 in your own terminal only (the Lab Practice Tool does this for you). Once per terminal:</span>
-<span class="p">$</span> export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"
-<span class="c">#    ...or permanently:</span>
-<span class="p">$</span> echo 'export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"' &gt;&gt; ~/.bashrc</pre>
+<span class="c"># 3. Topic 6 in your own terminal only (the Lab Practice Tool does this for you).</span>
+<span class="c">#    Run from the Practice-Labs folder, once per terminal:</span>
+<span class="p">$</span> export PATH="$PWD/labs/bin:$PATH"
+<span class="c">#    ...or permanently (also from the Practice-Labs folder; $PWD is saved as the full path):</span>
+<span class="p">$</span> echo "export PATH=\"$PWD/labs/bin:\$PATH\"" &gt;&gt; ~/.bashrc</pre>
   <div class="callout why"><strong>Why hashes don't match the quiz</strong>
     <p>A commit's hash depends on its time and author, so every <code>setup.sh</code> run produces new hashes. Read them from <code>git log --oneline</code> or <code>git reflog</code>. Never copy them from the task text.</p>
   </div>

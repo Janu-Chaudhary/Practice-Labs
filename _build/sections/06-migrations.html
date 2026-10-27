@@ -15,8 +15,8 @@
   <h3 class="sub" id="migrations-setup">Setup: the flyway command (Docker) and sqlite3</h3>
   <p>Flyway is not installed on your laptop. <code>labs/bin/flyway</code> is a tiny script that runs the official Flyway image
   (<code>flyway/flyway:13.10.0</code>, already pulled) in Docker. It mounts the <b>current folder</b>, runs as your user (so <code>shop.db</code> is not owned by root),
-  and Flyway reads <code>flyway.toml</code> from that folder. So: always <code>cd work</code> first. Once per terminal:</p>
-  <pre class="term"><span class="p">$</span> export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"
+  and Flyway reads <code>flyway.toml</code> from that folder. So: always <code>cd work</code> first. Once per terminal, from the Practice-Labs folder:</p>
+  <pre class="term"><span class="p">$</span> export PATH="$PWD/labs/bin:$PATH"
 <span class="p">$</span> cd labs/06-migrations/02-first-migrate &amp;&amp; ./setup.sh &amp;&amp; cd work
 <span class="p">$</span> flyway info</pre>
   <div class="anatomy">
@@ -239,7 +239,7 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>
-    <li><code>export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"</code> once per terminal, then <code>cd work</code></li>
+    <li><code>export PATH="$PWD/labs/bin:$PATH"</code> once per terminal from the Practice-Labs folder, then <code>cd work</code></li>
     <li><code>flyway info</code> what is applied / pending (start and end with it)</li>
     <li><code>flyway migrate</code> run pending migrations in order, record history rows</li>
     <li><code>flyway migrate -target=03</code> stop at version 03</li>
