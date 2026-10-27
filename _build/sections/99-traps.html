@@ -1,0 +1,56 @@
+<section class="topic" id="traps" data-title="Quiz-day traps">
+  <header class="topic-head">
+    <span class="tag">Read before the quiz</span>
+    <h2>Quiz-day traps &amp; method</h2>
+    <p class="lede">The small things that cost whole questions, and a routine for any terminal task, even one you've never seen.</p>
+  </header>
+
+  <div class="model"><h3>Method for any terminal task</h3>
+    <p>The checker grades the <b>final state</b>: which branch you're on, where each branch points, how many commits there are, what is inside the files.
+    It does not see your commands. So read the "What was checked" list first. That list is the real task.</p>
+  </div>
+
+  <h3 class="sub" id="traps-method">A 6-step routine</h3>
+  <ol class="steps">
+    <li><b>Read "What was checked" first.</b> Turn each line into a goal, e.g. "main has 4 commits" or "branch X points at commit Y".</li>
+    <li><b>Look before you act:</b> <code>pwd</code>, <code>ls</code>, <code>git status</code>, <code>git branch</code>, <code>git log --oneline --graph --all</code>, <code>docker ps -a</code>.</li>
+    <li><b>Predict the final state</b> in one line, e.g. "after the merge, main = base + mine + theirs + merge commit = 4".</li>
+    <li><b>One command at a time.</b> Read each command's output before typing the next. Errors are usually explained in that output.</li>
+    <li><b>Verify against the checks</b> with the same look-commands as step 2. Count commits with <code>git log --oneline | wc -l</code>.</li>
+    <li><b>Respect the "Stop" line.</b> Don't push, delete or add commits that it forbids. An extra commit fails a commit-count check.</li>
+  </ol>
+
+  <h3 class="sub" id="traps-list">The traps (each one has cost real marks)</h3>
+  <table class="cmd"><thead><tr><th>Trap</th><th>What to do instead</th></tr></thead><tbody>
+    <tr><td><code>docker build -t app:1.0</code></td><td>Missing the build context. Always end with a folder: <code>docker build -t app:1.0 .</code></td></tr>
+    <tr><td><code>docker run app:1.0 -p 8080:3000</code></td><td>Anything after the image name becomes the container's command. Options go <b>before</b> the image: <code>docker run -d -p 8080:3000 app:1.0</code></td></tr>
+    <tr><td><code>-p 3000:8080</code> backwards</td><td>It's <b>HOST:CONTAINER</b>. The app's own port goes on the right.</td></tr>
+    <tr><td><code>git merge x</code> then stuck in vim</td><td><kbd>Esc</kbd> <code>:wq</code> <kbd>Enter</kbd>. Better: <code>git merge x --no-edit</code>, or after resolving a conflict <code>git commit --no-edit</code>.</td></tr>
+    <tr><td>Resolved a conflict but commit fails</td><td>You must <code>git add file</code> after editing it. That's how git learns the conflict is resolved.</td></tr>
+    <tr><td>Conflict markers left in</td><td>Delete every <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> line. Check with <code>grep -n "&lt;&lt;&lt;&lt;" file</code>.</td></tr>
+    <tr><td>Committed on the wrong branch</td><td>Check <code>git branch</code> before committing. Use <code>git switch -c name</code> to create a branch <i>and</i> move onto it.</td></tr>
+    <tr><td><code>git commit -am</code> with a new file</td><td><code>-a</code> only includes files git already tracks. New files need <code>git add</code> first.</td></tr>
+    <tr><td>One extra commit</td><td><code>git reset --soft HEAD~1</code> undoes the last commit but keeps its changes staged.</td></tr>
+    <tr><td><code>&gt; reports/x.txt</code>: No such file or directory</td><td>The folder must exist first: <code>mkdir -p reports</code></td></tr>
+    <tr><td>Second <code>&gt;</code> wiped the first result</td><td><code>&gt;</code> replaces the file, <code>&gt;&gt;</code> adds to the end. Use <code>&gt;</code> for the first write, then <code>&gt;&gt;</code>.</td></tr>
+    <tr><td><code>grep A f1 | grep B f2</code></td><td>The second grep reads <code>f2</code> and ignores the pipe. Give the file only to the first grep: <code>grep A f1 | grep B</code></td></tr>
+    <tr><td>grep with 2 files adds <code>file:</code> prefixes</td><td>Use <code>grep -h</code>, or grep one file at a time in the order the task asks.</td></tr>
+    <tr><td><code>mv</code> before reading the file</td><td>Do the reading/grepping first, then move. Or use the file's new path.</td></tr>
+    <tr><td>Renamed a file with plain <code>mv</code> in a repo</td><td>Use <code>git mv old new</code>, or <code>mv</code> then <code>git add -A</code>, so git records the rename.</td></tr>
+    <tr><td>Edited an already-applied migration</td><td>Flyway's checksum check fails. Never edit applied migrations; add a new one.</td></tr>
+    <tr><td>Ran migration SQL by hand</td><td>The history table doesn't record it, so the runner will run it again and fail. Let the runner apply migrations.</td></tr>
+    <tr><td>Failing-test task: committed test + fix together</td><td>Two commits: <code>git add test_file</code> → commit, then <code>git add code_file</code> → commit.</td></tr>
+    <tr><td><code>git add .</code> grabbed junk</td><td>Running pytest creates <code>__pycache__/</code> and <code>.pytest_cache/</code>. Add files by name: <code>git add test_validate.py</code>.</td></tr>
+    <tr><td><code>git push</code> pushed the wrong thing</td><td>Be explicit: <code>git push origin main</code>.</td></tr>
+  </tbody></table>
+
+  <h3 class="sub" id="traps-look">Look-commands to type before and after</h3>
+  <pre class="term"><span class="p">$</span> pwd ; ls -la                              <span class="c"># where am I, what's here</span>
+<span class="p">$</span> git status                               <span class="c"># branch + staged/unstaged/untracked</span>
+<span class="p">$</span> git branch -a                            <span class="c"># all branches, * = current</span>
+<span class="p">$</span> git log --oneline --graph --all --decorate   <span class="c"># the whole history picture</span>
+<span class="p">$</span> git log --oneline | wc -l                <span class="c"># how many commits on this branch</span>
+<span class="p">$</span> git show main:greet.py                   <span class="c"># a file's content as stored at a branch</span>
+<span class="p">$</span> docker ps -a ; docker images ; docker volume ls
+<span class="p">$</span> sqlite3 shop.db ".schema"                <span class="c"># current database schema</span></pre>
+</section>

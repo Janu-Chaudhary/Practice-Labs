@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# flyway wrapper: runs the official Flyway image in Docker as if flyway were installed.
+#   Usage (from a lab's work/ folder):  flyway migrate | info | validate | repair | baseline ...
+# - mounts the current folder at /work and runs there, so flyway.toml, migrations/ and shop.db
+#   in the current folder are what Flyway sees (paths in flyway.toml are relative to it)
+# - runs as your user, so shop.db is not owned by root
+# - extra flags pass straight through, e.g.  flyway migrate -outOfOrder=true
+IMAGE="flyway/flyway:13.10.0"
+if ! docker info >/dev/null 2>&1; then
+  echo "flyway wrapper: Docker isn't running. Start Docker and retry." >&2; exit 1
+fi
+if [ ! -f flyway.toml ] && [ ! -f flyway.conf ]; then
+  echo "flyway wrapper: no flyway.toml in $(pwd). cd into the lab's work/ folder first." >&2
+fi
+exec docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -e REDGATE_DISABLE_TELEMETRY=true \
+  -v "$PWD:/work" -w /work \
+  "$IMAGE" "$@"

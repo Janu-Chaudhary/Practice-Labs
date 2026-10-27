@@ -1,0 +1,374 @@
+<section class="topic" id="gitremote" data-title="Git remotes &amp; recovery">
+  <header class="topic-head">
+    <span class="tag">Topic 3</span>
+    <h2>Git remotes, history and recovery</h2>
+    <p class="lede">Push, fetch and pull with confidence, fix "rejected" and "diverged", find lost commits with the reflog, and rewrite or undo history (rebase, cherry-pick, reset, revert) without losing anyone's work.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>Four locations: <b>working directory</b> → <b>staging area</b> → <b>local repository</b> → <b>remote repository</b>. <code>git status</code> only compares the first three, plus your <em>last downloaded copy</em> of the remote.</p>
+    <p>A <b>commit</b> is a snapshot + the hash of its parent. Its id is a hash of all of that, so changing anything (even just the parent) makes a new commit with a new id.</p>
+    <p>A <b>branch</b> is a pointer: a tiny file holding one hash. <code>origin/main</code> is also a pointer, your local note of "where main was on origin last time I talked to it". HEAD says which branch (or bare commit) you're on.</p>
+    <p>Almost every command here just <em>moves pointers</em> or <em>adds commits</em>. Commits that nothing points to aren't gone yet: the reflog still remembers them.</p>
+  </div>
+
+  <!-- ============ REMOTES ============ -->
+  <h3 class="sub" id="gitremote-remotes">Remotes: origin is just a name</h3>
+  <p>A remote is just another repository (GitHub hosts the same format you have locally). <code>origin</code> is not special: it's the nickname git gives the first remote (on <code>git clone</code>), or the one you add yourself. The remote only knows what you've pushed.</p>
+  <p>In the labs, the "GitHub" is a <b>bare repository</b> <code>remote.git</code> in the same folder: a repository with no working directory (just what's normally inside <code>.git</code>). You can't edit files in it; you only push to it and fetch from it. Make one with <code>git init --bare remote.git</code>.</p>
+  <div class="anatomy">
+    <code><span>git remote add</span> <span>origin</span> <span>remote.git</span></code>
+    <ol><li>register a new remote</li><li>the nickname you'll type later</li><li>its URL or path (on GitHub: <code>https://github.com/you/repo.git</code>)</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>git remote -v</code></td><td>list remotes with their URLs (fetch + push lines)</td></tr>
+    <tr><td><code>git remote add origin URL</code></td><td>add a remote called origin</td></tr>
+    <tr><td><code>git remote set-url origin URL</code></td><td>fix a wrong URL</td></tr>
+    <tr><td><code>git remote remove origin</code></td><td>forget a remote (deletes nothing on the server)</td></tr>
+    <tr><td><code>git clone URL [folder]</code></td><td>copy a repo; origin is set up automatically</td></tr>
+    <tr><td><code>git branch -a</code> / <code>git branch -r</code></td><td>show local + remote-tracking branches (<code>remotes/origin/main</code>)</td></tr>
+    <tr><td><code>git -C remote.git log --oneline main</code></td><td>run git <em>inside another folder</em> (here: see what the remote has). <code>-C</code> = "act as if started in"</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> git remote -v
+origin	remote.git (fetch)
+origin	remote.git (push)</pre>
+  <div class="err"><pre>error: remote origin already exists.</pre><p><b>Means:</b> you ran <code>git remote add origin</code> twice.</p><p><b>Fix:</b> <code>git remote set-url origin NEWURL</code> if the URL was wrong; otherwise nothing to do.</p></div>
+
+  <!-- ============ PUSH ============ -->
+  <h3 class="sub" id="gitremote-push">push: move the remote's pointer to match yours</h3>
+  <p><code>git push</code> sends the commits the remote is missing, then asks it to move its branch pointer to your commit. The remote only agrees if that is a <b>fast-forward</b>: its current commit must already be in your history (you're just ahead). Otherwise someone's commits would be dropped, so it refuses.</p>
+  <div class="anatomy">
+    <code><span>git push</span> <span>-u</span> <span>origin</span> <span>main</span></code>
+    <ol><li>upload commits + move the remote's branch</li><li>--set-upstream: remember origin/main as main's partner, so later plain <code>git push</code> / <code>git pull</code> work and status shows ahead/behind</li><li>which remote</li><li>which local branch (it becomes <code>main</code> on the remote)</li></ol>
+  </div>
+  <pre class="term"><span class="p">$</span> git push -u origin main
+To remote.git
+ * [new branch]      main -&gt; main
+branch 'main' set up to track 'origin/main'.
+<span class="p">$</span> git push                       <span class="c"># later: no arguments needed</span>
+   f141ba5..246fe06  main -&gt; main   <span class="c"># old..new remote position</span></pre>
+  <div class="callout tip"><strong>Tip</strong><p><code>git push origin main</code> pushes only main, whatever branch you are on. Plain <code>git push</code> pushes the branch you're on to its upstream. If a task says "don't push branch X", use the explicit form and never <code>git push --all</code>.</p></div>
+  <div class="err"><pre> ! [rejected]        main -&gt; main (fetch first)
+hint: Updates were rejected because the remote contains work that you do not
+hint: have locally. ...</pre><p><b>Means:</b> someone pushed commits you don't have, and you haven't even fetched them yet.</p><p><b>Fix:</b> integrate first (<code>git pull --no-rebase</code> or <code>git pull --rebase</code>), then push again.</p></div>
+  <div class="err"><pre> ! [rejected]        main -&gt; main (non-fast-forward)
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart.</pre><p><b>Means:</b> same problem, but you've fetched already: origin/main has commits your main lacks (behind or diverged).</p><p><b>Fix:</b> <code>git merge origin/main</code> (or <code>git rebase origin/main</code>), then push. Never <code>--force</code> on a shared branch.</p></div>
+  <div class="err"><pre>fatal: The current branch main has no upstream branch.</pre><p><b>Means:</b> plain <code>git push</code> doesn't know where to push.</p><p><b>Fix:</b> <code>git push -u origin main</code> once. (<code>fatal: No configured push destination</code> = there's no remote at all: <code>git remote add</code> first.)</p></div>
+
+  <!-- ============ FETCH vs PULL ============ -->
+  <h3 class="sub" id="gitremote-fetch">fetch vs pull: look vs look-and-merge</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What changes</th></tr></thead><tbody>
+    <tr><td><code>git fetch</code></td><td>downloads new commits into the <b>local repository</b> and moves <code>origin/main</code>. Your <code>main</code>, staging area and files are <b>untouched</b>.</td></tr>
+    <tr><td><code>git pull</code></td><td><code>git fetch</code> + <code>git merge origin/main</code> into your current branch: <code>main</code> moves and your <b>files on disk change</b>.</td></tr>
+    <tr><td><code>git pull --no-rebase</code></td><td>pull that merges (makes a merge commit if diverged)</td></tr>
+    <tr><td><code>git pull --rebase</code></td><td>fetch + replay your unpushed commits on top of origin/main (linear history)</td></tr>
+    <tr><td><code>git log --oneline main..origin/main</code></td><td>commits origin has that you don't (read <code>A..B</code> as "in B, not in A")</td></tr>
+    <tr><td><code>git log --oneline origin/main..main</code></td><td>your commits not pushed yet</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> git fetch
+From remote
+   6016bbe..a567bf9  main       -&gt; origin/main     <span class="c"># origin/main moved, nothing else</span>
+<span class="p">$</span> git status
+Your branch is behind 'origin/main' by 2 commits, and can be fast-forwarded.
+<span class="p">$</span> git pull
+Updating 6016bbe..a567bf9
+Fast-forward                                     <span class="c"># main just slid forward, no merge commit</span>
+ config.py | 1 +</pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>git status</code> never talks to the network. "Your branch is up to date with 'origin/main'" means "up to date with what I downloaded last time". Run <code>git fetch</code> first if you want the truth.</p></div>
+  <div class="err"><pre>hint: You have divergent branches and need to specify how to reconcile them.
+...
+fatal: Need to specify how to reconcile divergent branches.</pre><p><b>Means:</b> newer git (2.27+) won't guess merge vs rebase when both sides have new commits. <em>Nothing was changed</em> (the fetch part did happen).</p><p><b>Fix:</b> <code>git pull --no-rebase</code> (merge, as in quiz 1 Q11) or <code>git pull --rebase</code>. To set it once: <code>git config pull.rebase false</code>.</p></div>
+
+  <!-- ============ AHEAD / BEHIND / DIVERGED ============ -->
+  <h3 class="sub" id="gitremote-status">Ahead, behind, diverged: what to do</h3>
+  <table class="cmd"><thead><tr><th>git status says</th><th>Picture</th><th>Do</th></tr></thead><tbody>
+    <tr><td><code>Your branch is ahead of 'origin/main' by 1 commit.</code></td><td>you have commits origin lacks</td><td><code>git push</code></td></tr>
+    <tr><td><code>Your branch is behind 'origin/main' by 2 commits, and can be fast-forwarded.</code></td><td>origin has commits you lack</td><td><code>git pull</code> (or <code>git merge origin/main</code>)</td></tr>
+    <tr><td><code>Your branch and 'origin/main' have diverged, and have 1 and 1 different commits each</code></td><td>both sides have something new</td><td><code>git pull --no-rebase</code> then <code>git push</code>; or <code>git fetch</code> + <code>git merge origin/main</code> + <code>git push</code>; or <code>git pull --rebase</code> + <code>git push</code></td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> git log --graph --oneline --all --decorate
+* 0c4b258 (HEAD -&gt; main) Log each request
+| * 1894d77 (origin/main) Add README
+|/
+* aec22f7 Add app
+<span class="p">$</span> git pull --no-rebase --no-edit
+Merge made by the 'ort' strategy.
+<span class="p">$</span> git push
+   5064391..bfa5af5  main -&gt; main</pre>
+  <div class="callout why"><strong>Why not the "quick fixes"</strong><p><code>git push --force</code> makes origin's main = your main, so the teammate's commit vanishes from origin. <code>git reset --hard origin/main</code> moves <em>your</em> main back to origin's and overwrites your files, so <em>your</em> commit is thrown away. Only merging (or rebasing) keeps both. That's the whole of quiz 1 Q11.</p></div>
+
+  <!-- ============ DETACHED HEAD ============ -->
+  <h3 class="sub" id="gitremote-detached">Detached HEAD: on a commit, not a branch</h3>
+  <p>Normally HEAD points at a branch (<code>cat .git/HEAD</code> → <code>ref: refs/heads/main</code>) and committing moves that branch. <code>git checkout &lt;hash&gt;</code> (or <code>git switch --detach &lt;hash&gt;</code>) makes HEAD hold the hash itself. You can look around and even commit, but the new commits are pointed to only by HEAD. Switch away and nothing points at them anymore.</p>
+  <pre class="term"><span class="p">$</span> git checkout 21e158d
+Note: switching to '21e158d'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+...
+<span class="p">$</span> git commit -m "Try x"
+[detached HEAD eb596e0] Try x
+<span class="p">$</span> git switch main
+Warning: you are leaving 1 commit behind, not connected to
+any of your branches:
+
+  eb596e0 Try x
+
+If you want to keep it by creating a new branch, this may be a good time
+to do so with:
+
+ git branch &lt;new-branch-name&gt; eb596e0</pre>
+  <div class="callout tip"><strong>Tip</strong><p>Still detached and want to keep the work? <code>git switch -c new-name</code> right there. Already left? Use the reflog (next section). <code>git status</code> shows <code>HEAD detached at 21e158d</code> while you're detached.</p></div>
+
+  <!-- ============ REFLOG ============ -->
+  <h3 class="sub" id="gitremote-reflog">reflog: find lost commits, put a branch on them</h3>
+  <p><code>git reflog</code> is a local diary of every place HEAD has been: each commit, checkout, merge, rebase, reset. Newest first. <code>git log</code> follows parent links from branches, so it can't see commits no branch reaches; the reflog can (entries are kept ~90 days).</p>
+  <pre class="term"><span class="p">$</span> git reflog
+0f9523b HEAD@{0}: checkout: moving from bc59506... to main
+bc59506 HEAD@{1}: commit: Add rate limit config        <span class="c"># the lost commit</span>
+e8bf956 HEAD@{2}: checkout: moving from main to e8bf956  <span class="c"># went detached here</span>
+0f9523b HEAD@{3}: commit: Add README
+e8bf956 HEAD@{4}: commit (initial): Add request handler
+<span class="p">$</span> git reflog | grep "rate limit"
+bc59506 HEAD@{1}: commit: Add rate limit config</pre>
+  <div class="anatomy">
+    <code><span>bc59506</span> <span>HEAD@{1}</span>: <span>commit: Add rate limit config</span></code>
+    <ol><li>the commit HEAD was on (short hash: use this)</li><li>"where HEAD was 1 move ago"; also usable as a name: <code>git branch x HEAD@{1}</code></li><li>what moved HEAD + the commit message</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>git branch rate-limit bc59506</code></td><td>create a branch pointing at that commit. You <b>stay</b> where you are.</td></tr>
+    <tr><td><code>git switch -c rate-limit bc59506</code></td><td>create it AND switch to it (<code>git checkout -b name hash</code> is the old form)</td></tr>
+    <tr><td><code>git branch -f name hash</code></td><td>move an existing branch to a commit</td></tr>
+    <tr><td><code>git branch -D name</code></td><td>delete a branch even if unmerged (prints <code>Deleted branch x (was 6c4f777).</code>; that hash is your way back)</td></tr>
+    <tr><td><code>git log --oneline --all</code></td><td>commits reachable from any branch/tag (still not the lost ones)</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>The branch must exist <em>with that name</em>, pointing at <em>that</em> commit. <code>git merge bc59506</code> or <code>git cherry-pick bc59506</code> skips the branch (quiz check "rate-limit is the commit ..." fails), and cherry-pick even makes a copy with a new hash, so the original isn't "merged".</p></div>
+
+  <!-- ============ REBASE ============ -->
+  <h3 class="sub" id="gitremote-rebase">rebase: replay your commits on a new base</h3>
+  <p><code>git rebase main</code> (while on <code>feature</code>) takes the commits that are on feature but not on main, and re-creates them one by one on top of main. Then it moves <code>feature</code> to the last new copy. Each copy has a new parent, so each gets a <b>new hash</b>. <code>main</code> doesn't move. The old commits stay in the repository (and the reflog) until garbage collection.</p>
+  <pre class="term"><span class="c"># before                              # after: git switch feature ; git rebase main</span>
+* d032d80 (feature) Strip whitespace     * 728ce94 (HEAD -&gt; feature) Strip whitespace in notes
+* 1dbf664 Add notes                      * 484ae4b Add notes
+| * 0f708d1 (main) Update changelog      * 0f708d1 (main) Update changelog
+|/                                       * 47b8a42 Add README
+* 47b8a42 Add README</pre>
+  <div class="anatomy">
+    <code><span>git switch feature</span> ; <span>git rebase</span> <span>main</span></code>
+    <ol><li>be on the branch you want to MOVE</li><li>replay my commits...</li><li>...on top of this (the new base). Can be <code>origin/main</code> too</li></ol>
+  </div>
+  <p><b>Conflicts during a rebase.</b> Git stops at the commit that conflicts. Fix it like a merge conflict, then continue:</p>
+  <pre class="term"><span class="p">$</span> git pull --rebase
+CONFLICT (content): Merge conflict in routes.txt
+error: could not apply 68f0b35... Add search endpoint
+<span class="p">$</span> cat routes.txt
+GET /orders
+&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD                 <span class="c"># during rebase HEAD = the base you replay ONTO (the teammate's side)</span>
+GET /health
+=======
+GET /search
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; 68f0b35 (Add search endpoint)   <span class="c"># your commit being replayed</span>
+<span class="p">$</span> code routes.txt                <span class="c"># keep what's needed, delete the 3 marker lines</span>
+<span class="p">$</span> git add routes.txt
+<span class="p">$</span> git rebase --continue          <span class="c"># opens the editor with the message: save + close</span>
+Successfully rebased and updated refs/heads/main.</pre>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>git rebase --continue</code></td><td>after <code>git add</code>-ing the fixed files: make this commit and go on</td></tr>
+    <tr><td><code>git rebase --abort</code></td><td>panic button: back to exactly before the rebase</td></tr>
+    <tr><td><code>git rebase --skip</code></td><td>drop the commit that conflicts (rarely what you want)</td></tr>
+    <tr><td><code>git merge --abort</code></td><td>same panic button for a conflicted merge</td></tr>
+  </tbody></table>
+  <table class="cmd"><thead><tr><th>Way to combine</th><th>History afterwards</th><th>Use when</th></tr></thead><tbody>
+    <tr><td><code>git merge feature</code> (on main)</td><td>original commits kept + a merge commit with 2 parents (or fast-forward if main had nothing new)</td><td>always safe, also on shared branches</td></tr>
+    <tr><td><code>git rebase main</code> (on feature)</td><td>linear; your commits get new hashes; no merge commit</td><td>only on commits <b>nobody else has</b> (unpushed, or your own branch)</td></tr>
+    <tr><td><code>git merge --squash feature</code> + <code>git commit</code></td><td>all of feature's changes as ONE new commit on main; feature's commits aren't in main's history</td><td>tidy main for a messy feature (GitHub's "Squash and merge")</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>Direction matters. <code>git rebase main</code> moves the branch you're <em>on</em>. On main, <code>git rebase feature</code> would move main instead. Check with <code>git branch</code> first. And don't rebase commits that are already pushed and pulled by others: their copies would no longer match.</p></div>
+
+  <!-- ============ CHERRY-PICK ============ -->
+  <h3 class="sub" id="gitremote-cherry">cherry-pick: copy one commit here</h3>
+  <p><code>git cherry-pick &lt;hash&gt;</code> takes the <em>change</em> that commit made (its diff against its parent) and applies it as a <b>new commit</b> on your current branch. New parent → new hash. The original commit and its branch stay as they are. Typical use: a hotfix made on one branch that main needs right now.</p>
+  <pre class="term"><span class="p">$</span> git switch main
+<span class="p">$</span> git log --oneline --all | grep "Fix timeout"
+9a1b2c3 Fix timeout
+<span class="p">$</span> git cherry-pick 9a1b2c3
+[main 5d6e7f8] Fix timeout                     <span class="c"># same message, different hash</span></pre>
+  <p>Conflicts work the same: fix, <code>git add</code>, <code>git cherry-pick --continue</code> (or <code>--abort</code>).</p>
+
+  <!-- ============ RESET / REVERT ============ -->
+  <h3 class="sub" id="gitremote-reset">reset (soft / mixed / hard) and revert</h3>
+  <p><code>git reset &lt;commit&gt;</code> moves your <b>current branch pointer</b> to that commit. The mode decides which of the 3 local locations are also reset to match it:</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>Local repo (branch)</th><th>Staging area</th><th>Working directory</th></tr></thead><tbody>
+    <tr><td><code>git reset --soft HEAD~1</code></td><td>moves back</td><td>kept (changes staged)</td><td>kept</td></tr>
+    <tr><td><code>git reset HEAD~1</code> (= <code>--mixed</code>)</td><td>moves back</td><td>reset (changes unstaged)</td><td>kept</td></tr>
+    <tr><td><code>git reset --hard HEAD~1</code></td><td>moves back</td><td>reset</td><td><b>reset: edits are lost</b></td></tr>
+  </tbody></table>
+  <p><code>HEAD~1</code> = parent of HEAD, <code>HEAD~2</code> = grandparent. The "removed" commits are not deleted: <code>git reflog</code> + <code>git reset --hard &lt;hash&gt;</code> brings them back. Uncommitted edits wiped by <code>--hard</code> are truly gone.</p>
+  <pre class="term"><span class="p">$</span> git reset --soft HEAD~1          <span class="c"># "uncommit", keep everything staged</span>
+<span class="p">$</span> git restore --staged debug.log   <span class="c"># unstage the file that shouldn't be in it</span>
+<span class="p">$</span> git commit -m "Add discount"      <span class="c"># recommit, fixed</span></pre>
+  <p><code>git revert &lt;hash&gt;</code> is the opposite approach: it adds a <b>new commit</b> that undoes that commit's change. History only grows, so it's the right tool for commits that are <b>already pushed</b>.</p>
+  <pre class="term"><span class="p">$</span> git revert --no-edit 0866799
+[main 632cb80] Revert "Disable auth check"
+<span class="p">$</span> git push                          <span class="c"># fast-forward, teammates just pull</span></pre>
+  <div class="callout why"><strong>Why</strong><p>Reset on a pushed commit moves your main <em>behind</em> origin's: the push is rejected, and forcing it rewrites history everyone else already has. Rule: <b>not pushed → reset is fine. Pushed → revert.</b></p></div>
+  <div class="callout trap"><strong>Trap</strong><p><code>git revert HEAD</code> undoes the <em>latest</em> commit, which may not be the bad one. Look up the hash with <code>git log --oneline | grep</code>. Without <code>--no-edit</code>, revert opens an editor for the message.</p></div>
+
+  <!-- ============ INTERNALS ============ -->
+  <h3 class="sub" id="gitremote-internals">Internals you can poke from the terminal</h3>
+  <p>Everything in git is an object named by the hash of its content (blob = file content, tree = directory listing, commit = tree + parent + author + message, tag). Branches and HEAD are plain text files.</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it shows</th></tr></thead><tbody>
+    <tr><td><code>cat .git/HEAD</code></td><td><code>ref: refs/heads/main</code> (on a branch) or a bare hash (detached)</td></tr>
+    <tr><td><code>cat .git/refs/heads/main</code></td><td>the 40-char hash main points at. That's the whole branch.</td></tr>
+    <tr><td><code>git rev-parse main</code> / <code>HEAD</code> / <code>HEAD~1</code> / <code>origin/main</code></td><td>turn any name into its full hash (works even when refs are "packed")</td></tr>
+    <tr><td><code>git rev-parse --abbrev-ref HEAD</code></td><td>current branch name</td></tr>
+    <tr><td><code>git cat-file -t HASH</code></td><td>type of object: commit / tree / blob / tag</td></tr>
+    <tr><td><code>git cat-file -p HASH</code></td><td>pretty-print it (commit: tree + parent lines; tree: file list; blob: content)</td></tr>
+    <tr><td><code>echo 'test content' | git hash-object --stdin</code></td><td>the hash git would give that content (same content → same hash, anywhere)</td></tr>
+    <tr><td><code>git rev-list --count main</code></td><td>number of commits reachable from main (what "main has 4 commits" checks)</td></tr>
+    <tr><td><code>git merge-base --is-ancestor A B</code></td><td>exit 0 if A is in B's history ("A is merged into B")</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> cat .git/HEAD
+ref: refs/heads/main
+<span class="p">$</span> cat .git/refs/heads/main
+c7636ff5a2559b91b1b5f789625a30bd334ea922
+<span class="p">$</span> git cat-file -t HEAD
+commit
+<span class="p">$</span> git cat-file -p HEAD
+tree f4b354863caa9cea99b95422c9dab70465757d87
+parent 21e158d954167dbdf7556ed32baccd74875ee538
+author S &lt;s@x&gt; 1793032842 +0530
+committer S &lt;s@x&gt; 1793032842 +0530
+
+Add b
+<span class="p">$</span> git cat-file -p 'HEAD^{tree}'
+100644 blob 78981922613b2afb6025042ff6bd878ac1994e85	a.txt
+100644 blob 61780798228d17af2d34fce4cfbdf35556832472	b.txt
+<span class="p">$</span> echo 'test content' | git hash-object --stdin
+d670460b4b4aece5915caf5c68d12f560a9fe3e4</pre>
+  <div class="callout tip"><strong>Tip</strong><p>The <code>parent</code> line is why rebase and cherry-pick change hashes: same change, different parent → different commit content → different hash. Run <code>git cat-file -p</code> on a merge commit: it has <b>two</b> parent lines.</p></div>
+
+  <!-- ============ SECRETS ============ -->
+  <h3 class="sub" id="gitremote-secrets">Secrets in history</h3>
+  <p>Deleting a file makes a new snapshot without it. Every older snapshot still has it, in every clone. So a committed <code>.env</code> is leaked even after "Remove env file".</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>git log --all --oneline -- .env</code></td><td>every commit (any branch) that touched <code>.env</code>. <code>--</code> = "what follows are paths"</td></tr>
+    <tr><td><code>git log --all --full-history -- .env</code></td><td>the lecture's proof: <b>no output</b> = never committed anywhere</td></tr>
+    <tr><td><code>git log --all --oneline --diff-filter=A -- .env</code></td><td>only the commit that <b>A</b>dded it (D = deleted, M = modified)</td></tr>
+    <tr><td><code>git show HASH</code></td><td>message + full diff of that commit</td></tr>
+    <tr><td><code>git show HASH:.env</code></td><td>the file as it was in that commit (folder untouched)</td></tr>
+    <tr><td><code>git log -p -S "DB_PASSWORD" --all</code></td><td>commits where that string was added/removed</td></tr>
+    <tr><td><code>git check-ignore -v .env</code></td><td>which .gitignore line ignores it (no output = not ignored)</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> git log --all --oneline -- .env
+cfc90e8 Remove env file
+677777a Add config loader
+<span class="p">$</span> git show 677777a:.env
+DB_PASSWORD=Summer2024!
+<span class="p">$</span> echo ".env" &gt;&gt; .gitignore &amp;&amp; git add .gitignore &amp;&amp; git commit -m "Ignore .env"</pre>
+  <div class="callout why"><strong>Why rotate</strong><p>Once pushed, assume it's copied (forks, clones, scanners find it in minutes). The fix that works is <b>rotate</b>: change the password where it's used so the leaked one is dead. Rewriting history afterwards is clean-up, not a fix. Prevent it with <code>.gitignore</code> + a committed <code>.env.example</code>. Note: <code>.gitignore</code> doesn't affect files git already tracks (untrack with <code>git rm --cached .env</code>).</p></div>
+
+  <!-- ============ SCENARIOS ============ -->
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Push a brand-new repo</summary>
+    <div class="body"><p>You have commits on main and an empty repository at <code>remote.git</code>. No remote is set. Connect it as origin and push so that later a plain <code>git push</code> works.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git remote add origin remote.git
+<span class="p">$</span> git push -u origin main</pre><p><code>-u</code> stores origin/main as main's upstream; from then on <code>git push</code>/<code>git pull</code> need no arguments.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Which locations changed?</summary>
+    <div class="body"><p>A teammate pushed 2 commits. You run <code>git fetch</code>. Which of the four locations changed? Then you run <code>git pull</code>. Which now?</p>
+      <details class="answer"><summary>Show answer</summary><p>After fetch: only the <b>local repository</b> (new objects + <code>origin/main</code> moved). main, staging and working directory are untouched; status says "behind by 2". After pull: the merge moves <code>main</code> and updates the <b>working directory</b> (and staging matches it).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Lost detached commit (quiz 1 Q19)</summary>
+    <div class="body"><p>main: "Add request handler" (pushed), "Add README" (not pushed). Earlier you committed "Add rate limit config" on a detached HEAD at the first commit and switched back. Make branch <code>rate-limit</code> at that commit, merge it into main, push main. Don't push rate-limit. Expected: main has 4 commits.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git reflog | grep "rate limit"
+bc59506 HEAD@{1}: commit: Add rate limit config
+<span class="p">$</span> git branch rate-limit bc59506
+<span class="p">$</span> git merge --no-edit rate-limit
+<span class="p">$</span> git push origin main</pre><p>4 = request handler, README, rate limit config, merge commit. Without <code>--no-edit</code> an editor opens: save and close.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Push rejected, diverged (quiz 1 Q11)</summary>
+    <div class="body"><p>status: "have diverged, and have 1 and 1 different commits each". Which get your commit onto origin and keep the teammate's? (a) <code>git push --force</code> (b) <code>git pull</code> then <code>git push</code> (c) <code>git fetch</code>, <code>git merge origin/main</code>, <code>git push</code> (d) <code>git reset --hard origin/main</code>, <code>git push</code>.</p>
+      <details class="answer"><summary>Show answer</summary><p><b>(b) and (c).</b> Force erases the teammate's commit on origin; reset --hard throws yours away. On a real terminal (b) may need <code>git pull --no-rebase</code> because of the "divergent branches" message.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> After a rebase (quiz 2 Q1)</summary>
+    <div class="body"><p>main: README → "Update changelog". feature: README → "Add notes" → "Strip whitespace in notes". You run <code>git switch feature</code>, <code>git rebase main</code>. True or false: (a) the two feature commits get new ids (b) feature's tip contains CHANGELOG.md (c) main now points at feature's tip (d) the old commits are deleted immediately.</p>
+      <details class="answer"><summary>Show answer</summary><p>(a) true: new parent → new hash. (b) true: they're replayed on top of "Update changelog". (c) false: rebase moves only the branch you're on. (d) false: they stay (reflog) until garbage collection.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Bad commit already pushed</summary>
+    <div class="body"><p>"Disable auth check" was pushed 2 commits ago; teammates pulled. Undo just that change and push, keeping the later commit.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git log --oneline | grep "Disable auth"
+0866799 Disable auth check
+<span class="p">$</span> git revert --no-edit 0866799
+<span class="p">$</span> git push</pre><p>Revert adds a new commit, so it's a normal fast-forward push. <code>reset --hard HEAD~2</code> would also delete the later commit and need a force push.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Unseen: you committed on the wrong branch</summary>
+    <div class="body"><p>You made commit "Fix typo" on <code>main</code> (not pushed), but it belongs on <code>docs</code> (which exists). Get it onto docs and remove it from main.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git log --oneline -1          <span class="c"># note the hash, e.g. 4f5e6d7</span>
+<span class="p">$</span> git switch docs
+<span class="p">$</span> git cherry-pick 4f5e6d7       <span class="c"># copy it onto docs (new hash)</span>
+<span class="p">$</span> git switch main
+<span class="p">$</span> git reset --hard HEAD~1       <span class="c"># OK: not pushed, and the work now lives on docs</span></pre><p>Cherry-pick copies; reset removes it from main. If it had been pushed, use <code>git revert</code> on main instead.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Unseen: undo a "reset --hard" mistake</summary>
+    <div class="body"><p>You ran <code>git reset --hard HEAD~2</code> by accident and two commits vanished from <code>git log</code>. Get main back to where it was.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git reflog
+1a2b3c4 HEAD@{0}: reset: moving to HEAD~2
+9f8e7d6 HEAD@{1}: commit: Add totals      <span class="c"># where main was before</span>
+<span class="p">$</span> git reset --hard 9f8e7d6            <span class="c"># or: git reset --hard HEAD@{1}</span></pre><p>Commits are never deleted by reset; only the pointer moved. The reflog shows the old position. (Uncommitted edits lost by the first <code>--hard</code> can't be recovered this way.)</p></details>
+    </div></details>
+
+  <!-- ============ LABS ============ -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="gitremote-01"> <code>labs/03-git-remote/01-remote-push</code>
+      <span>Add a bare repo as origin, push with -u, then plain push</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-02"> <code>labs/03-git-remote/02-fetch-vs-pull</code>
+      <span>Fetch, see "behind", inspect main..origin/main, fast-forward pull</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-03"> <code>labs/03-git-remote/03-recover-deleted-branch</code>
+      <span>Bring back a branch deleted with git branch -D using the reflog</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-04"> <code>labs/03-git-remote/04-undo-commit-soft</code>
+      <span>reset --soft to take a stray file out of the last commit</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-05"> <code>labs/03-git-remote/05-quiz-lost-commit</code>
+      <span>Quiz 1 Q19: detached commit → reflog → branch → merge → push</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-06"> <code>labs/03-git-remote/06-quiz-diverged</code>
+      <span>Quiz 1 Q11: push rejected, diverged; merge and push without losing either commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-07"> <code>labs/03-git-remote/07-quiz-rebase-feature</code>
+      <span>Quiz 2 Q1: rebase feature onto main, see the new hashes</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-08"> <code>labs/03-git-remote/08-quiz-revert-pushed</code>
+      <span>Undo a pushed commit with revert and push</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-09"> <code>labs/03-git-remote/09-twist-rebase-teammate</code>
+      <span>Teammate pushed first; pull --rebase, resolve a conflict, keep history linear, push</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-10"> <code>labs/03-git-remote/10-twist-secret-leak</code>
+      <span>Find the commit that leaked .env, branch it, ignore .env from now on</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <!-- ============ CHEAT SHEET ============ -->
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>git remote -v</code> / <code>git remote add origin URL</code> list / add a remote</li>
+    <li><code>git push -u origin main</code> first push + set upstream; afterwards just <code>git push</code></li>
+    <li><code>git fetch</code> moves only origin/main; <code>git pull</code> = fetch + merge (files change)</li>
+    <li><code>git pull --no-rebase</code> / <code>git pull --rebase</code> merge or rebase when diverged</li>
+    <li><code>git log --oneline --graph --all --decorate</code> see every branch and where origin/main is</li>
+    <li><code>git log --oneline main..origin/main</code> what you're missing (swap = what you haven't pushed)</li>
+    <li>Rejected push → integrate (pull/merge or rebase), then push. Never <code>--force</code> / <code>reset --hard origin/main</code></li>
+    <li><code>git reflog | grep "msg"</code> find lost commits (detached, deleted branch, after reset)</li>
+    <li><code>git branch name HASH</code> branch at a commit (stay put); <code>git switch -c name HASH</code> (and switch)</li>
+    <li><code>git merge --no-edit X</code> merge without opening the editor</li>
+    <li><code>git switch feature; git rebase main</code> replay feature on main (new hashes, main stays)</li>
+    <li><code>git add f; git rebase --continue</code> / <code>git rebase --abort</code> during a rebase conflict</li>
+    <li><code>git cherry-pick HASH</code> copy one commit onto the current branch</li>
+    <li><code>git reset --soft|--mixed|--hard HEAD~1</code> move branch back; keep staged / keep files / lose all</li>
+    <li><code>git revert --no-edit HASH</code> undo a pushed commit with a new commit</li>
+    <li><code>git cat-file -t/-p HASH</code>, <code>cat .git/HEAD</code>, <code>git rev-parse main</code> look inside</li>
+    <li><code>git log --all --oneline -- .env</code>, <code>git show HASH:.env</code> find a leaked secret → rotate it</li>
+    <li><code>git rev-list --count main</code>, <code>git merge-base --is-ancestor A B</code> check your own work like the grader</li>
+  </ul></div>
+</section>

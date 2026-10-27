@@ -1,0 +1,359 @@
+<section class="topic" id="testing" data-title="Testing + CI">
+  <header class="topic-head">
+    <span class="tag">Topic 5</span>
+    <h2>Testing with pytest, the failing-test-then-fix workflow, and reading CI config</h2>
+    <p class="lede">Run and select tests, write boundary tests that catch real bugs, commit "failing test" then "fix" in exactly the right order, undo a wrong commit, and read a GitHub Actions workflow.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>A test is a <b>claim you can run</b>: set up (Arrange), call the code (Act), check the result (Assert). No assert = no claim.
+    A bug fix is two commits: commit 1 adds a test that is <b>red</b> on the old code (proof the bug exists), commit 2 is the smallest change that makes it <b>green</b>.
+    The grader looks at those commits by position: <code>HEAD~1</code> = your test commit, <code>HEAD</code> = your fix.
+    CI just reruns the same tests on a clean machine; branch protection is what turns a red CI run into a blocked merge.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-vocab">The vocabulary (what the MCQs ask)</h3>
+  <p>These words come straight from the T2L2 slides. Know each one in one sentence.</p>
+  <table class="cmd"><thead><tr><th>Word</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td>Arrange-Act-Assert</td><td>The shape of every test: set up the world, do the thing, check the claim.</td></tr>
+    <tr><td>Test case / suite / runner</td><td>One scenario / a named group of cases / the program that runs them and reports (pytest).</td></tr>
+    <tr><td>Assertion</td><td>States the expected outcome and fails loudly if wrong. Code without one only proves "it did not crash".</td></tr>
+    <tr><td>Normal / boundary / invalid</td><td>Rule "at least 8 chars": normal = 12 chars, boundary = 7 (just below) and 8 (exactly at), invalid = empty / missing. Most bugs live at the boundary.</td></tr>
+    <tr><td>Unit test</td><td>One function or small module, no real network or database. Fast. E.g. password validation, tax calculation.</td></tr>
+    <tr><td>Integration test</td><td>Several real parts together: route + validation + database. E.g. duplicate-email check against a real table; POST /api/login returns an error.</td></tr>
+    <tr><td>End-to-end (E2E)</td><td>A browser drives a real user journey (sign up then sign in). Slowest, most brittle; keep only a few for critical paths.</td></tr>
+    <tr><td>Testing pyramid</td><td>Many unit, some integration, few E2E. A budget, not a law.</td></tr>
+    <tr><td>Regression test</td><td>A test written for a bug you fixed, so the bug can't silently come back.</td></tr>
+    <tr><td>Coverage</td><td>Which lines / branches / functions <b>ran</b>. It measures execution, <b>not</b> whether anything was checked.</td></tr>
+    <tr><td>Stub</td><td>Returns a fixed, canned value in place of a real dependency.</td></tr>
+    <tr><td>Fake</td><td>A working but simplified implementation, e.g. an in-memory database.</td></tr>
+    <tr><td>Mock</td><td>Records how it was called, so the test asserts on the interaction ("save was called"), not the result.</td></tr>
+    <tr><td>Mutation testing</td><td>A tool makes a small change (e.g. <code>&gt;=</code> to <code>&gt;</code>) and reruns tests. A <b>surviving</b> mutant = your tests can't tell broken code from right code.</td></tr>
+    <tr><td>CI</td><td>Every proposed change is automatically built and tested on a clean machine. CI validates; it does not deploy (that's CD).</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>"100% coverage" does <b>not</b> mean the code is tested. A test that calls signup and asserts <code>True</code> covers every line and checks nothing. Quiz 2 Q2: a Mock test proves <code>save</code> was called, not that the response was 201; an in-memory fake + asserting 201 and the stored user checks the behaviour.</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-run">Running pytest and reading its output</h3>
+  <p><code>pytest</code> looks in the current folder (and subfolders) for files named <code>test_*.py</code> or <code>*_test.py</code>, and inside them runs every function whose name starts with <code>test_</code>. Always run it from the project folder (where the files are).</p>
+  <div class="anatomy">
+    <code><span>pytest</span> <span>-v</span> <span>-k "password and not short"</span> <span>test_users.py</span></code>
+    <ol><li>the test runner</li><li>-v = verbose: one line per test with PASSED/FAILED</li><li>-k = keep only tests whose name matches this expression (and / or / not; quote it)</li><li>optional: which file (or folder) to run; default is everything</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>pytest</code></td><td>run all tests; one character per test: <code>.</code> pass, <code>F</code> fail, <code>E</code> error (crash before/outside the assert, e.g. import error)</td></tr>
+    <tr><td><code>pytest -q</code></td><td>quiet: less header, short summary</td></tr>
+    <tr><td><code>pytest -v</code></td><td>verbose: full name + result for every test</td></tr>
+    <tr><td><code>pytest -x</code></td><td>stop at the first failure (fast feedback)</td></tr>
+    <tr><td><code>pytest -k email</code></td><td>only tests with "email" in the name (case-insensitive)</td></tr>
+    <tr><td><code>pytest test_validate.py</code></td><td>only that file</td></tr>
+    <tr><td><code>pytest test_validate.py::test_accepts_exactly_eight_characters</code></td><td>only that one test (its "node id", copy it from the FAILED line)</td></tr>
+    <tr><td><code>pytest -s</code></td><td>show <code>print()</code> output (normally hidden for passing tests)</td></tr>
+    <tr><td><code>pytest --lf</code></td><td>rerun only the tests that failed last time</td></tr>
+    <tr><td><code>echo $?</code></td><td>exit code of the LAST command: run it straight after pytest</td></tr>
+  </tbody></table>
+  <table class="cmd"><thead><tr><th>pytest exit code</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><code>0</code></td><td>all selected tests passed</td></tr>
+    <tr><td><code>1</code></td><td>some tests failed (this is what CI sees as "red")</td></tr>
+    <tr><td><code>2</code></td><td>interrupted (Ctrl+C, or errors while collecting, e.g. syntax error in a test file)</td></tr>
+    <tr><td><code>4</code></td><td>usage error, e.g. <code>file or directory not found</code></td></tr>
+    <tr><td><code>5</code></td><td>no tests collected (wrong file names, or <code>-k</code> matched nothing)</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> pytest
+collected 3 items
+
+test_validate.py ..F                                                     [100%]
+
+=================================== FAILURES ===================================
+____________________ test_accepts_exactly_eight_characters _____________________
+
+    def test_accepts_exactly_eight_characters():
+&gt;       assert is_valid_length("abcdefgh") is True
+E       AssertionError: assert False is True
+E        +  where False = is_valid_length('abcdefgh')
+
+test_validate.py:13: AssertionError
+=========================== short test summary info ============================
+FAILED test_validate.py::test_accepts_exactly_eight_characters - AssertionErr...
+========================= 1 failed, 2 passed in 0.05s ==========================
+<span class="p">$</span> echo $?
+1
+<span class="c"># read it bottom-up: counts -&gt; which test -&gt; the E lines: the call returned False, we expected True</span></pre>
+  <div class="callout tip"><strong>Tip</strong><p>In <code>assert X == Y</code> pytest prints the evaluated values in the same order: <code>assert 190 == 180</code> means the code gave 190 and the test expected 180. The <code>+ where</code> line tells you which call produced the value.</p></div>
+  <div class="err"><pre>ERROR: file or directory not found: and</pre><p><b>Means:</b> you wrote <code>pytest -k password and not short</code> without quotes; the shell split it and pytest thinks <code>and</code> is a file.</p><p><b>Fix:</b> <code>pytest -k "password and not short"</code></p></div>
+  <div class="err"><pre>ERROR: file or directory not found: test_password_too_short</pre><p><b>Means:</b> a bare test name is treated as a path.</p><p><b>Fix:</b> <code>pytest test_users.py::test_password_too_short</code> or <code>pytest -k test_password_too_short</code>.</p></div>
+  <div class="err"><pre>ModuleNotFoundError: No module named 'validate'</pre><p><b>Means:</b> pytest was run from the wrong folder, or the import name doesn't match the file name.</p><p><b>Fix:</b> <code>cd</code> into the folder that holds <code>validate.py</code> and run <code>pytest</code> there. In tests: <code>from validate import is_valid_length</code> (file name without <code>.py</code>).</p></div>
+  <div class="err"><pre>no tests ran in 0.00s</pre><p><b>Means:</b> exit code 5: nothing collected. The file isn't named <code>test_*.py</code>, the function doesn't start with <code>test_</code>, or <code>-k</code> matched nothing.</p><p><b>Fix:</b> rename, or check the <code>-k</code> word.</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-write">Writing tests: assert, boundaries, pytest.raises</h3>
+  <p>A pytest test is just a function named <code>test_...</code> that uses plain <code>assert</code>. Name it like a specification: the name should say what broke when it goes red.</p>
+  <pre class="term"><span class="c"># test_validate.py</span>
+import pytest
+from validate import is_valid_length
+
+def test_accepts_exactly_eight_characters():   <span class="c"># boundary, at the limit</span>
+    <span class="c"># Arrange</span>
+    password = "abcdefgh"
+    <span class="c"># Act</span>
+    result = is_valid_length(password)
+    <span class="c"># Assert</span>
+    assert result is True
+
+def test_rejects_seven_characters():           <span class="c"># boundary, one below</span>
+    assert is_valid_length("abcdefg") is False
+
+def test_none_is_rejected():                   <span class="c"># invalid input -&gt; must raise</span>
+    with pytest.raises(TypeError):
+        is_valid_length(None)</pre>
+  <div class="anatomy">
+    <code><span>with pytest.raises(ValueError):</span> <span>is_adult(-1)</span></code>
+    <ol><li>passes only if the indented block raises ValueError (or a subclass); otherwise the test fails with <code>DID NOT RAISE</code></li><li>the call that should blow up goes inside the block</li></ol>
+  </div>
+  <p><b>Which values to test for a rule "at least N":</b> N-1 (last bad), N (first good), one normal value, one invalid input. 3 and 20 are useless for the edge: they give the same answer for <code>&gt;= 8</code>, <code>&gt; 8</code> and <code>&gt;= 7</code>.</p>
+  <table class="cmd"><thead><tr><th>Bug (mutant) in the code</th><th>Test that catches (kills) it</th></tr></thead><tbody>
+    <tr><td><code>len(pw) &gt; 8</code> instead of <code>&gt;= 8</code></td><td>exactly 8 chars must be accepted</td></tr>
+    <tr><td><code>len(pw) &gt;= 7</code></td><td>exactly 7 chars must be rejected</td></tr>
+    <tr><td><code>len(pw) &gt;= 9</code></td><td>exactly 8 chars must be accepted</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>A test with no <code>assert</code> always passes unless the code crashes:</p>
+<pre class="term">def test_ten_percent_off_200():
+    result = apply_discount(200, 10)
+    print("result is", result)      <span class="c"># green, even though result is 190, not 180</span></pre>
+  <p>Also weak: <code>assert result</code> (any non-zero number passes) and <code>assert status != 201</code> (a 500 passes). Assert the exact value.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p>Two test functions with the same name in one file: Python keeps only the last one, so the first test silently disappears. <code>pytest -v</code> shows the real list.</p></div>
+  <div class="err"><pre>Failed: DID NOT RAISE &lt;class 'ValueError'&gt;</pre><p><b>Means:</b> the code inside <code>with pytest.raises(...)</code> returned normally.</p><p><b>Fix:</b> either the code has a bug (good, you found it) or you put the wrong call / wrong exception type in the block.</p></div>
+  <div class="err"><pre>NameError: name 'pytest' is not defined</pre><p><b>Fix:</b> add <code>import pytest</code> at the top of the test file (only needed for <code>pytest.raises</code> etc.; plain asserts don't need it).</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-workflow">Failing test, then fix: exactly two commits</h3>
+  <p>This is quiz 2 Q16 (5 marks) and Milestone 1. The checks look at commit <b>positions</b>: <code>HEAD~1</code> must contain the new test and the <i>old</i> code; <code>HEAD</code> has the fix. So the order and the "only one file per commit" rule matter.</p>
+  <pre class="term"><span class="p">$</span> cat validate.py                     <span class="c"># find the bug first: len(password) &gt; 8</span>
+<span class="p">$</span> pytest                              <span class="c"># 2 passed: existing tests miss the edge</span>
+<span class="p">$</span> code test_validate.py               <span class="c"># add test_accepts_exactly_eight_characters, save</span>
+<span class="p">$</span> pytest                              <span class="c"># 1 failed, 2 passed  -&gt; RED is what you want now</span>
+<span class="p">$</span> git status --short
+ M test_validate.py
+<span class="p">$</span> git add test_validate.py            <span class="c"># ONLY the test file</span>
+<span class="p">$</span> git commit -m "Add failing test for 8-character password"
+<span class="p">$</span> code validate.py                    <span class="c"># &gt; 8   becomes   &gt;= 8</span>
+<span class="p">$</span> pytest                              <span class="c"># 3 passed -&gt; GREEN</span>
+<span class="p">$</span> git add validate.py
+<span class="p">$</span> git commit -m "Fix password length check to accept 8 characters"
+<span class="p">$</span> git log --oneline
+c3d4e5f (HEAD -&gt; main) Fix password length check to accept 8 characters
+a1b2c3d Add failing test for 8-character password
+b8b4933 Add password length check</pre>
+  <p>Check yourself the way the grader does:</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it shows</th></tr></thead><tbody>
+    <tr><td><code>git log --oneline</code></td><td>number of commits and their order (newest on top)</td></tr>
+    <tr><td><code>git show --stat HEAD~1</code></td><td>which files the test commit changed (should be only the test file)</td></tr>
+    <tr><td><code>git show HEAD~1:validate.py</code></td><td>the file as it was in that commit (must still have the bug)</td></tr>
+    <tr><td><code>git log -1 --format=%s HEAD~1</code></td><td>that commit's message (must contain "failing test")</td></tr>
+    <tr><td><code>git diff HEAD~1 HEAD</code></td><td>what the fix commit changed</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p><code>git add .</code> or <code>git commit -am "..."</code> after you already touched <code>validate.py</code> puts the fix into the "failing test" commit. Then <code>HEAD~1:validate.py</code> is no longer the original and the test never failed in history. Always <code>git status</code> before committing and add the one file by name.</p></div>
+  <div class="callout why"><strong>Why</strong><p>The red commit is evidence the bug existed and that your test can see it. If you fix first, you never saw the test fail, so you don't know it can fail. Six months later, the test is what stops the bug coming back (regression).</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>The labs ignore <code>__pycache__/</code> and <code>.pytest_cache/</code> with a <code>.gitignore</code>. In the quiz, if <code>git status</code> shows those folders as untracked, just don't add them: add your file by name.</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-undo">Undo: reset --soft, --amend, and what not to use</h3>
+  <p>Made an extra commit, or committed the wrong thing? Nothing pushed yet = you can safely rewrite your local history.</p>
+  <div class="anatomy">
+    <code><span>git reset</span> <span>--soft</span> <span>HEAD~1</span></code>
+    <ol><li>move the current branch pointer</li><li>--soft = keep the changes from the undone commit, still staged</li><li>to one commit before HEAD (the commit is removed from the branch)</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>Commit</th><th>Your changes end up</th></tr></thead><tbody>
+    <tr><td><code>git reset --soft HEAD~1</code></td><td>removed</td><td>staged (ready to commit again)</td></tr>
+    <tr><td><code>git reset HEAD~1</code> (= <code>--mixed</code>)</td><td>removed</td><td>in the files, unstaged</td></tr>
+    <tr><td><code>git reset --hard HEAD~1</code></td><td>removed</td><td><b>deleted</b> - careful</td></tr>
+    <tr><td><code>git revert HEAD</code></td><td>kept, plus a NEW commit that undoes it</td><td>-- (adds a commit: wrong when the count must be exact)</td></tr>
+    <tr><td><code>git commit --amend -m "msg"</code></td><td>last commit replaced (new ID)</td><td>whatever is staged is added into it</td></tr>
+    <tr><td><code>git restore --staged f</code></td><td>--</td><td>f unstaged, content kept</td></tr>
+    <tr><td><code>git restore f</code></td><td>--</td><td>f's unstaged edits thrown away</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="c"># Q16 gone wrong: you committed a typo fix as a 3rd commit. Fold it into the fix commit:</span>
+<span class="p">$</span> git reset --soft HEAD~1         <span class="c"># 3rd commit gone, its change is staged</span>
+<span class="p">$</span> git commit --amend --no-edit    <span class="c"># add the staged change into the fix commit, keep its message</span>
+<span class="p">$</span> git log --oneline               <span class="c"># back to exactly 2 new commits</span>
+
+<span class="c"># Wrong message on the last commit (e.g. forgot "failing test"):</span>
+<span class="p">$</span> git commit --amend -m "Add failing test for 8-character password"</pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>--amend</code> always changes the <b>last</b> commit. If you already made the fix commit, amending to fix the test commit's message would rewrite the fix instead. Then: <code>git reset --soft HEAD~1</code> (fix changes now staged), <code>git stash</code>, amend the test commit, <code>git stash pop</code>, commit the fix again. Easier: check the message before the second commit. <code>git commit</code> with no <code>-m</code> (and <code>--amend</code> without <code>-m</code>/<code>--no-edit</code>) opens an editor; in nano save with Ctrl+O, Enter, Ctrl+X.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p>Never amend or reset commits you already pushed to a shared branch: everyone else's history stops matching. The quiz says "Don't push", so local rewriting is fine.</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-coverage">Coverage (concept + command)</h3>
+  <p>Coverage needs the <code>pytest-cov</code> plugin. It is <b>not</b> installed on this machine, so the labs don't use it; know the command and how to read it.</p>
+  <pre class="term"><span class="p">$</span> pip install pytest-cov
+<span class="p">$</span> pytest --cov=. --cov-report=term-missing
+Name          Stmts   Miss  Cover   Missing
+-------------------------------------------
+validate.py       2      0   100%
+<span class="c"># 100% = every line RAN during the tests. It says nothing about whether the result was asserted.</span>
+<span class="c"># --cov-branch adds branch coverage (were both sides of each if taken?)</span></pre>
+  <div class="callout why"><strong>Why</strong><p>The slides' example: a signup test that posts a user and asserts <code>True</code> gives 100% coverage of the route, but the route could return 500 and the test would still pass. Mutation testing is the stronger signal: it checks that the tests would notice a change.</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="testing-ci">Reading a GitHub Actions workflow</h3>
+  <p>A workflow is a YAML file in <code>.github/workflows/</code>. GitHub runs it on a fresh, clean machine ("runner") when the events under <code>on:</code> happen. Any step that exits non-zero (pytest exit code 1) fails the job: a red X.</p>
+  <pre class="term">name: CI
+on:                            <span class="c"># WHEN to run</span>
+  push:
+    branches: [main]           <span class="c"># after commits land on main</span>
+  pull_request:
+    branches: [main]           <span class="c"># on every PR that targets main -&gt; the PR shows a check</span>
+jobs:
+  test:                        <span class="c"># job id - this name shows up as the status check</span>
+    runs-on: ubuntu-latest     <span class="c"># fresh VM each run</span>
+    steps:                     <span class="c"># run in order; first failure stops the job</span>
+      - uses: actions/checkout@v4          <span class="c"># get the repo code</span>
+      - uses: actions/setup-python@v5      <span class="c"># install a runtime</span>
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q                     <span class="c"># exit code 1 -&gt; job red</span></pre>
+  <table class="cmd"><thead><tr><th>Key</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><code>on: push: branches: [main]</code></td><td>runs only after code is already on main. Too late to stop a bad merge.</td></tr>
+    <tr><td><code>on: pull_request: branches: [main]</code></td><td>runs on PRs into main, so reviewers see green/red before merging</td></tr>
+    <tr><td><code>jobs:</code> / <code>steps:</code></td><td>jobs run in parallel on separate machines; steps run in order inside one job</td></tr>
+    <tr><td><code>uses:</code> vs <code>run:</code></td><td>use a ready-made action / run a shell command</td></tr>
+    <tr><td><code>continue-on-error: true</code></td><td>a failing step counts as success: hides red tests. Remove it.</td></tr>
+    <tr><td><code>services:</code></td><td>a throw-away container (e.g. test database) for this job only; same level as <code>steps:</code></td></tr>
+    <tr><td><code>env:</code></td><td>environment variables for a step, e.g. a test-only DATABASE_URL</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p><b>Required status checks are a GitHub setting, not YAML.</b> Repo Settings -&gt; Branches (branch protection rule) or Rules -&gt; Rulesets -&gt; "Require status checks to pass" -&gt; pick the job (e.g. <code>test</code>). Quiz 2 Q3: to block merging a PR with failing tests you need BOTH the <code>pull_request</code> trigger (so the check runs on the PR) AND the required check (so red blocks the merge). Without the trigger, a required check never reports and every PR waits. Without the rule, red is only a warning. <code>continue-on-error</code> and "ask people in the README" are wrong answers.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p>YAML indentation is spaces only, and siblings must line up. <code>pull_request:</code> indented under <code>push:</code> becomes a setting of push, not a second trigger. A tab character = parse error. Quick local syntax check: <code>python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"</code>. (Fun fact: PyYAML prints the key <code>on</code> as <code>True</code>, because YAML 1.1 reads bare <code>on</code> as a boolean. GitHub reads it correctly.)</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>Debugging a red CI run: read the <b>first</b> meaningful error, find which step/command failed, run that same command locally, fix, push again. "Works on my machine" failures usually mean something was installed on your laptop but not declared in requirements/lockfile.</p></div>
+
+  <!-- ============================================================ -->
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Which test failed, and what did the code return?</summary>
+    <div class="body"><p>pytest ends with <code>FAILED test_cart.py::test_total_with_tax_adds_15_percent - assert 15.0 == 115.0</code>. Which value came from the code, and how do you rerun only this test? What does <code>echo $?</code> print?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> pytest test_cart.py::test_total_with_tax_adds_15_percent
+<span class="p">$</span> echo $?
+1</pre><p>The test is <code>assert total_with_tax([100]) == 115.0</code>, so the left value 15.0 is what the code returned (it multiplied by 0.15 instead of 1.15). Exit code 1 = tests failed.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Pick the boundary tests</summary>
+    <div class="body"><p>Rule: "free shipping for orders of 50 or more". The code says <code>if total &gt; 50</code>. Existing tests use 10 and 120. Which two totals should you add, and which one fails today?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">def test_order_of_exactly_50_ships_free():
+    assert shipping_cost(50) == 0        <span class="c"># fails today (code says 5)</span>
+
+def test_order_just_under_50_pays():
+    assert shipping_cost(49.99) == 5     <span class="c"># passes; guards the other side</span></pre><p>Test the last value on each side of the edge. 10 and 120 can't tell <code>&gt;</code> from <code>&gt;=</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q16 recreation: password length</summary>
+    <div class="body"><p>main has one commit "Add password length check". <code>is_valid_length("abcdefgh")</code> returns False; a password needs at least 8 chars. Make exactly two commits: a test whose message contains "failing test", then the fix. Checked: HEAD~1 test file contains "abcdefgh", HEAD~1 validate.py unchanged, 3 commits, at least 3 tests all passing.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cat validate.py                 <span class="c"># return len(password) &gt; 8</span>
+<span class="p">$</span> code test_validate.py           <span class="c"># add:</span>
+def test_accepts_exactly_eight_characters():
+    assert is_valid_length("abcdefgh") is True
+<span class="p">$</span> pytest                          <span class="c"># 1 failed, 2 passed</span>
+<span class="p">$</span> git add test_validate.py
+<span class="p">$</span> git commit -m "Add failing test for 8-character password"
+<span class="p">$</span> code validate.py                <span class="c"># &gt; 8  -&gt;  &gt;= 8</span>
+<span class="p">$</span> pytest                          <span class="c"># 3 passed</span>
+<span class="p">$</span> git add validate.py
+<span class="p">$</span> git commit -m "Fix password length check"
+<span class="p">$</span> git log --oneline               <span class="c"># 3 commits</span></pre><p>Add the test file only in commit 1, so validate.py at HEAD~1 is still the original.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Duplicate email returns 201</summary>
+    <div class="body"><p><code>signup(repo, email)</code> returns 201 for a second signup with the same email; it should return 409. Tests use <code>FakeUserRepo</code>, an in-memory fake. Write the failing test and the fix as two commits. Why not use <code>Mock()</code> for the repo?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">def test_signup_rejects_duplicate_email():
+    repo = FakeUserRepo()
+    signup(repo, "user@example.com")
+    status = signup(repo, "user@example.com")
+    assert status == 409
+    assert repo.count() == 1
+<span class="p">$</span> pytest ; git add test_signup.py ; git commit -m "Add failing test for duplicate email signup"
+<span class="c"># signup.py, before repo.save(email):</span>
+    if repo.find(email) is not None:
+        return 409
+<span class="p">$</span> pytest ; git add signup.py ; git commit -m "Return 409 for duplicate email"</pre><p>A Mock stores nothing, so <code>find</code> never sees the first user; you could only assert "save was called". The fake really stores users, so the test checks the behaviour.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Oops, a third commit</summary>
+    <div class="body"><p>You finished Q16 and then ran <code>git add . &amp;&amp; git commit -m wip</code>, which committed <code>notes.txt</code> and a debug print. The check needs exactly 3 commits. Remove the wip commit, keep notes.txt on disk (untracked), drop the debug print.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git reset --soft HEAD~1                  <span class="c"># wip commit gone, its changes staged</span>
+<span class="p">$</span> git restore --staged notes.txt grade.py  <span class="c"># unstage both</span>
+<span class="p">$</span> git restore grade.py                     <span class="c"># throw away the debug print</span>
+<span class="p">$</span> git status                               <span class="c"># Untracked: notes.txt</span></pre><p><code>git revert</code> would add a 5th commit; <code>--hard</code> would delete notes.txt; <code>--amend</code> would fold the junk into your fix commit.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> PR merged with failing tests</summary>
+    <div class="body"><p>The workflow has <code>on: push: branches: [main]</code> and the test step has <code>continue-on-error: true</code>. A PR with a failing test showed no checks and was merged. Fix the YAML, and say what else must change outside the file.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+...
+      - name: Run unit tests
+        run: pytest -q            <span class="c"># continue-on-error removed</span>
+<span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Run CI on pull requests to main"</pre><p>Outside YAML: in GitHub's branch protection / ruleset for main, make the job <code>test</code> a required status check. Trigger + rule = merge gate.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> The surviving mutant</summary>
+    <div class="body"><p>Code is <code>return len(pw) &gt;= 8</code>. Tests check "abc" (False) and a 19-char password (True). A mutation tool reports: mutant <code>&gt;= 8 -&gt; &gt; 8</code> SURVIVED, mutant <code>&gt;= 8 -&gt; &gt;= 7</code> SURVIVED. Which tests kill them? Does the code need a fix?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">def test_accepts_exactly_eight_characters():
+    assert is_valid_length("abcdefgh") is True    <span class="c"># kills &gt; 8</span>
+
+def test_rejects_seven_characters():
+    assert is_valid_length("abcdefg") is False    <span class="c"># kills &gt;= 7</span></pre><p>No code fix: the code is right, the <i>tests</i> were weak. Both new tests pass on the real code and fail on the mutants. Commit only the test file.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Two bugs, four commits</summary>
+    <div class="body"><p><code>shipping_cost(50)</code> returns 5 (should be free) and <code>is_valid_postcode("3000")</code> returns False (4 digits is valid). The team wants one failing-test + fix pair per bug. What are the four commits and what does pytest say at each?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">1. test shipping_cost(50) == 0       "Add failing test for free shipping at 50"   pytest: red
+2. total &gt; 50  -&gt;  total &gt;= 50       "Fix free shipping at 50"                    pytest: green
+3. test is_valid_postcode("3000")   "Add failing test for 4-digit postcode"      pytest: red
+4. len(code) == 5  -&gt;  == 4          "Fix postcode length"                        pytest: green</pre><p>If you write both tests first, commit 2 is still red. If you fix both bugs in commit 2, the postcode test in commit 3 never fails, so it proves nothing.</p></details>
+    </div></details>
+
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="testing-01"> <code>labs/05-testing/01-run-pytest</code>
+      <span>Run pytest, read the failure, record test name, exit code, pass count, actual value</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-02"> <code>labs/05-testing/02-boundary-tests</code>
+      <span>Add 17 / 18 boundary tests and a pytest.raises test; checker plants bugs to prove they work</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-03"> <code>labs/05-testing/03-test-that-asserts-nothing</code>
+      <span>A green test with no assert: make it a real (red) test and commit it as a failing test</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-04"> <code>labs/05-testing/04-select-tests</code>
+      <span>Run subsets with -v, -k, file::test and a -k "and not" expression</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-05"> <code>labs/05-testing/05-quiz-password-length</code>
+      <span>Quiz 2 Q16: failing test for "abcdefgh", then the fix, exactly two commits</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-06"> <code>labs/05-testing/06-quiz-duplicate-email</code>
+      <span>Duplicate signup returns 201: failing test with an in-memory fake, then return 409</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-07"> <code>labs/05-testing/07-quiz-undo-extra-commit</code>
+      <span>Remove an accidental "wip" commit with reset --soft, keep notes.txt, drop a debug print</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-08"> <code>labs/05-testing/08-quiz-ci-pull-request</code>
+      <span>Fix a GitHub Actions workflow: add pull_request trigger, remove continue-on-error, name the required check</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-09"> <code>labs/05-testing/09-twist-kill-the-mutant</code>
+      <span>Code is right but mutants survive: add the missing 7 / 8 boundary tests</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-10"> <code>labs/05-testing/10-twist-two-bugs</code>
+      <span>Two bugs, two failing-test + fix pairs: red, green, red, green</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>pytest</code> / <code>pytest -q</code> / <code>pytest -v</code> run all tests (normal / quiet / one line each)</li>
+    <li><code>pytest -x</code> stop at the first failure; <code>pytest -s</code> show print output</li>
+    <li><code>pytest -k "email and not long"</code> run tests whose name matches (quote it)</li>
+    <li><code>pytest file.py::test_name</code> run one test</li>
+    <li><code>echo $?</code> right after: 0 pass, 1 tests failed, 4 bad path/usage, 5 no tests collected</li>
+    <li><code>assert f(x) == expected</code> a test needs an assert; no assert = always green</li>
+    <li><code>with pytest.raises(ValueError): f(-1)</code> expect an error (<code>import pytest</code>)</li>
+    <li>Boundary for "at least N": test N-1 and N (plus a normal and an invalid value)</li>
+    <li><code>git add test_x.py &amp;&amp; git commit -m "Add failing test for ..."</code> commit 1: test only, red</li>
+    <li><code>git add x.py &amp;&amp; git commit -m "Fix ..."</code> commit 2: fix only, green</li>
+    <li><code>git show --stat HEAD~1</code> / <code>git show HEAD~1:file</code> inspect the test commit like the grader</li>
+    <li><code>git reset --soft HEAD~1</code> undo last commit, keep changes staged</li>
+    <li><code>git restore --staged f</code> unstage; <code>git restore f</code> discard edits</li>
+    <li><code>git commit --amend -m "msg"</code> rewrite the LAST commit (only before pushing)</li>
+    <li>Coverage = lines that ran, not lines that were checked. <code>pytest --cov=. --cov-report=term-missing</code> (needs pytest-cov)</li>
+    <li>Stub = canned value; fake = working in-memory version; mock = records calls</li>
+    <li><code>on: pull_request: branches: [main]</code> run CI on PRs into main</li>
+    <li>Required status checks = GitHub branch protection setting, not YAML; remove <code>continue-on-error: true</code></li>
+  </ul></div>
+</section>

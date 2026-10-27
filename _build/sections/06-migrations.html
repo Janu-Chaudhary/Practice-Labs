@@ -1,0 +1,261 @@
+<section class="topic" id="migrations" data-title="Migrations &amp; Flyway">
+  <header class="topic-head">
+    <span class="tag">Topic 6</span>
+    <h2>Database migrations with Flyway + sqlite3, and migration files in git</h2>
+    <p class="lede">Write numbered migration files, apply them with <code>flyway migrate</code>, read the history table with sqlite3, and recover from checksum mismatches, hand-run SQL and version collisions.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p><b>Files in git, memory in the database.</b> A migration is a file of SQL (<code>03_add_currency.up.sql</code>). Saving it changes nothing.
+    The <b>runner</b> (Flyway) connects to the database, reads the <b>history table</b> (<code>flyway_schema_history</code>, one row per applied migration),
+    runs every file that has no row yet, in version order, and inserts a row for each. The history is a log: <b>append-only</b> (never edit an applied file),
+    <b>ordered</b> (03 assumes 01 and 02 ran), <b>checksum-verified</b> (edit an applied file and Flyway stops). Anything done by hand is invisible to it.</p>
+  </div>
+
+  <h3 class="sub" id="migrations-setup">Setup: the flyway command (Docker) and sqlite3</h3>
+  <p>Flyway is not installed on your laptop. <code>labs/bin/flyway</code> is a tiny script that runs the official Flyway image
+  (<code>flyway/flyway:13.10.0</code>, already pulled) in Docker. It mounts the <b>current folder</b>, runs as your user (so <code>shop.db</code> is not owned by root),
+  and Flyway reads <code>flyway.toml</code> from that folder. So: always <code>cd work</code> first. Once per terminal:</p>
+  <pre class="term"><span class="p">$</span> export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"
+<span class="p">$</span> cd labs/06-migrations/02-first-migrate &amp;&amp; ./setup.sh &amp;&amp; cd work
+<span class="p">$</span> flyway info</pre>
+  <div class="anatomy">
+    <code><span>docker run --rm</span> <span>-u "$(id -u):$(id -g)"</span> <span>-v "$PWD:/work" -w /work</span> <span>flyway/flyway:13.10.0</span> <span>migrate</span></code>
+    <ol><li>run a throw-away container (removed when it exits)</li><li>as your user id, so created files belong to you</li><li>mount this folder at /work and run there: Flyway sees flyway.toml, migrations/, shop.db</li><li>the pinned official image</li><li>your Flyway command (anything you type after <code>flyway</code>)</li></ol>
+  </div>
+  <p>Every lab's <code>flyway.toml</code> looks like this. The <code>url</code> says which database (an SQLite file next to it), <code>locations</code> where the files are:</p>
+  <pre class="term">[environments.default]
+url = "jdbc:sqlite:shop.db"
+
+[flyway]
+environment = "default"
+locations = ["filesystem:migrations"]
+sqlMigrationPrefix = ""            <span class="c"># course naming: no V in front</span>
+sqlMigrationSeparator = "_"        <span class="c"># 03_add_currency -&gt; version 03, description "add currency"</span>
+sqlMigrationSuffixes = [".up.sql"] <span class="c"># only .up.sql are migrations; .down.sql are ignored</span>
+validateMigrationNaming = true     <span class="c"># misnamed file = error, not silently skipped</span></pre>
+  <div class="callout tip"><strong>Tip</strong><p>The quiz terminal may have Flyway installed directly. Same commands, same output: <code>flyway migrate</code>, <code>flyway info</code>. The wrapper only hides the Docker part.</p></div>
+
+  <h3 class="sub" id="migrations-naming">File names: course naming vs Flyway's default</h3>
+  <table class="cmd"><thead><tr><th>Naming</th><th>Example</th><th>Used in</th></tr></thead><tbody>
+    <tr><td>Course (configured above)</td><td><code>03_add_currency.up.sql</code> + <code>03_add_currency.down.sql</code></td><td>quiz 2 Q18, labs 03-10</td></tr>
+    <tr><td>Flyway default</td><td><code>V3__add_currency.sql</code> (capital V, <b>two</b> underscores)</td><td>Flyway docs, lab 02</td></tr>
+    <tr><td>Timestamp version</td><td><code>202610071517_add_search_index.sql</code></td><td>quiz 2 Q17, labs 05, 10</td></tr>
+  </tbody></table>
+  <p>Version = everything before the first separator. Versions compare <b>as numbers</b>: <code>3</code> and <code>03</code> are the same version (duplicate!), and <code>05 &lt; 202610261030</code>.
+  The description is the rest, with <code>_</code> shown as spaces. Flyway (free edition) has <b>no undo command</b>: a <code>.down.sql</code> is a file you run yourself with sqlite3.</p>
+  <div class="callout trap"><strong>Trap</strong><p>A file that does not match the naming is not a migration. Without <code>validateMigrationNaming</code> Flyway silently skips it. Rule: if <code>flyway info</code> does not list your file, its name is wrong.</p></div>
+
+  <h3 class="sub" id="migrations-sqlite">sqlite3: look inside the database</h3>
+  <p>An SQLite database is one file (<code>shop.db</code>). <code>sqlite3</code> opens it. Dot-commands have <b>no</b> <code>;</code>; SQL statements <b>need</b> <code>;</code>.</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>sqlite3 shop.db</code></td><td>open the <code>sqlite&gt;</code> prompt on that file (a typo creates a new empty file!)</td></tr>
+    <tr><td><code>.tables</code></td><td>list tables</td></tr>
+    <tr><td><code>.schema orders</code></td><td>show the CREATE statement (columns, types, indexes)</td></tr>
+    <tr><td><code>.headers on</code> / <code>.mode column</code></td><td>nicer output</td></tr>
+    <tr><td><code>.quit</code> (or Ctrl+D)</td><td>leave</td></tr>
+    <tr><td><code>sqlite3 shop.db "SELECT * FROM orders;"</code></td><td>one-shot: run one statement and exit (quote the SQL!)</td></tr>
+    <tr><td><code>sqlite3 -header -column shop.db "..."</code></td><td>one-shot with headers + columns</td></tr>
+    <tr><td><code>sqlite3 shop.db &lt; migrations/03_x.down.sql</code></td><td>run a whole SQL file</td></tr>
+    <tr><td><code>sqlite3 shop.db "SELECT count(*) FROM orders;" &gt; n.txt</code></td><td>save a result to a file</td></tr>
+    <tr><td><code>sqlite3 shop.db "SELECT name FROM pragma_table_info('orders');"</code></td><td>list a table's columns</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> sqlite3 -header -column shop.db "SELECT version, description, script, success FROM flyway_schema_history;"
+version  description    script                   success
+-------  -------------  -----------------------  -------
+01       create orders  01_create_orders.up.sql  1
+02       index orders   02_index_orders.up.sql   1</pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>sqlite3 shop.db SELECT * FROM orders;</code> without quotes: the shell expands <code>*</code> to file names and eats the <code>;</code>. Forgot <code>;</code> at the prompt? You see <code>...&gt;</code>: type <code>;</code> and Enter.</p></div>
+
+  <h3 class="sub" id="migrations-commands">The Flyway commands</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>flyway info</code></td><td>table of every migration: Success / Pending / Baseline / Out of Order. Read-only. Run it first and last.</td></tr>
+    <tr><td><code>flyway migrate</code></td><td>validate, then run every pending migration in version order, each in its own transaction, and record a history row</td></tr>
+    <tr><td><code>flyway migrate -target=03</code></td><td>apply only up to version 03 (staged rollouts)</td></tr>
+    <tr><td><code>flyway validate</code></td><td>compare files with history (checksums, missing, pending). Fails also when something is still pending.</td></tr>
+    <tr><td><code>flyway repair</code></td><td>rewrite stored checksums to match the files, remove failed rows. Does NOT run SQL.</td></tr>
+    <tr><td><code>flyway baseline -baselineVersion=02</code></td><td>existing DB without history: "already at 02". Creates the history table with a BASELINE row.</td></tr>
+    <tr><td><code>flyway migrate -outOfOrder=true</code></td><td>allow a lower version that arrived after a higher one was applied</td></tr>
+    <tr><td><code>flyway migrate -skipExecutingMigrations=true -target=03</code></td><td>record 03 as applied without running it (only when the same SQL was already run by hand)</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> flyway info
++-----------+---------+----------------+------+---------------------+---------+----------+
+| Category  | Version | Description    | Type | Installed On        | State   | Undoable |
++-----------+---------+----------------+------+---------------------+---------+----------+
+| Versioned | 01      | create orders  | SQL  | 2026-10-26 16:46:13 | Success | No       |
+| Versioned | 02      | index orders   | SQL  | 2026-10-26 16:46:13 | Success | No       |
+| Versioned | 03      | add currency   | SQL  |                     | Pending | No       |
+| Versioned | 04      | create coupons | SQL  |                     | Pending | No       |
++-----------+---------+----------------+------+---------------------+---------+----------+
+<span class="p">$</span> flyway migrate
+Database: jdbc:sqlite:******** (SQLite 3.50)
+Successfully validated 4 migrations (execution time 00:00.023s)
+Current version of schema "main": 02
+Migrating schema "main" to version "03 - add currency"
+Migrating schema "main" to version "04 - create coupons"
+Successfully applied 2 migrations to schema "main", now at version v04
+<span class="p">$</span> flyway migrate
+Schema "main" is up to date. No migration necessary.</pre>
+  <div class="callout why"><strong>Why</strong><p>What <code>migrate</code> does per file, as on the slide: <code>BEGIN;</code> run the file's SQL; <code>INSERT</code> the history row; <code>COMMIT;</code>. Both commit together or not at all. On SQLite and PostgreSQL DDL is transactional, so a failing migration prints <code>Changes successfully rolled back</code> and leaves <b>no</b> history row: fix the file and run migrate again.</p></div>
+
+  <h3 class="sub" id="migrations-tx">BEGIN / COMMIT / ROLLBACK, and reverse migrations</h3>
+  <table class="cmd"><thead><tr><th></th><th>What it is</th><th>Example result</th></tr></thead><tbody>
+    <tr><td><b>ROLLBACK</b></td><td>discards changes that have <b>not committed</b></td><td><code>BEGIN; ALTER TABLE users DROP COLUMN bio; ROLLBACK;</code> bio values still there</td></tr>
+    <tr><td><b>Reverse (down) migration</b></td><td><b>new</b> SQL run after the up committed</td><td><code>ALTER TABLE users ADD COLUMN bio text;</code> bio is back, <b>NULL</b> in every row</td></tr>
+    <tr><td><b>Restore</b></td><td>recover data from a backup</td><td>values as of the backup time</td></tr>
+  </tbody></table>
+  <p>Without BEGIN each statement autocommits: if statement 2 fails, statement 1 stays. A down migration cannot restore values the up deleted (quiz 2 Q9: answer <b>NULL for every row</b>). Run downs in <b>reverse order</b> (04 then 03). With Flyway free edition, after running a down by hand also delete its history row, or Flyway still thinks it is applied:</p>
+  <pre class="term"><span class="p">$</span> sqlite3 shop.db &lt; migrations/02_drop_bio.down.sql
+<span class="p">$</span> sqlite3 shop.db "DELETE FROM flyway_schema_history WHERE version = '02';"   <span class="c"># quote it: version is text</span>
+<span class="p">$</span> flyway info        <span class="c"># 02 Pending</span></pre>
+
+  <h3 class="sub" id="migrations-errors">Errors you must recognise</h3>
+  <div class="err"><pre>ERROR: Validate failed: Migrations have failed validation
+Migration checksum mismatch for migration version 02
+-&gt; Applied to database : 1944033762
+-&gt; Resolved locally    : 2087934152
+Either revert the changes to the migration, or run repair to update the schema history.</pre>
+    <p><b>Means:</b> someone edited an already-applied file. Flyway stops <b>before running anything</b>.</p>
+    <p><b>Fix:</b> put the file back (<code>git restore --source=HEAD~1 file</code> or <code>git revert</code>) and put the change in the <b>next</b> migration (03). <code>repair</code> only makes the error go away: the new SQL never runs, and other databases differ. Use repair only for harmless edits (comments) or to clear a failed row.</p></div>
+  <div class="err"><pre>ERROR: Migration of schema "main" to version "03 - add full name" failed! Changes successfully rolled back.
+Message    : [SQLITE_ERROR] SQL error or missing database (duplicate column name: full_name)</pre>
+    <p><b>Means:</b> the change was already made by hand (psql/sqlite3). Hand-run SQL changes the schema but writes no history row, so 03 is still Pending (quiz 2 Q8). PostgreSQL says <code>column "full_name" of relation "users" already exists</code>; for a table: <code>table x already exists</code>.</p>
+    <p><b>Fix:</b> undo the hand change if it holds no data (<code>ALTER TABLE users DROP COLUMN full_name;</code>) then <code>flyway migrate</code>; or record it without running: <code>flyway migrate -skipExecutingMigrations=true -target=03</code>.</p></div>
+  <div class="err"><pre>ERROR: Found more than one migration with version 04
+Offenders:
+-&gt; /work/migrations/04_add_coupons.sql (SQL)
+-&gt; /work/migrations/04_add_search_index.sql (SQL)</pre>
+    <p><b>Means:</b> two branches picked the same number. Git merged fine (different file names); only the runner complains.</p>
+    <p><b>Fix:</b> on <b>your</b> branch, <code>git mv</code> your file to a timestamp version, commit, merge main in. Never renumber the one already on main.</p></div>
+  <div class="err"><pre>ERROR: Found non-empty schema(s) "main" but no schema history table. Use baseline() or set baselineOnMigrate to true ...</pre>
+    <p><b>Means:</b> the database has tables but was never managed by Flyway.</p><p><b>Fix:</b> <code>flyway baseline -baselineVersion=02</code> (the version the DB already matches), then <code>flyway migrate</code>.</p></div>
+  <div class="err"><pre>Detected resolved migration not applied to database: 05.
+To ignore this migration, set -ignoreMigrationPatterns='*:ignored'. To allow executing this migration, set -outOfOrder=true.</pre>
+    <p><b>Means:</b> a lower version showed up after a higher one was applied (e.g. 202610261030 applied, then 05 merged in). The same text without the outOfOrder part comes from <code>flyway validate</code> when something is simply Pending: run migrate.</p>
+    <p><b>Fix:</b> <code>flyway migrate -outOfOrder=true</code>.</p></div>
+  <div class="err"><pre>ERROR: Invalid SQL filenames found:
+Invalid versioned migration name format: 04-add-x.up.sql (could not recognise version number 04-add-x)</pre>
+    <p><b>Means:</b> wrong separator/prefix (here <code>-</code> instead of <code>_</code>; in default naming <code>V3_x.sql</code> with one underscore).</p><p><b>Fix:</b> rename the file.</p></div>
+  <div class="err"><pre>Error: stepping, Cannot add a NOT NULL column with default value NULL</pre>
+    <p><b>Means:</b> SQLite can't add a NOT NULL column to rows that exist without a default.</p><p><b>Fix:</b> <code>ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'</code> (old rows get INR), or add it nullable, backfill, then enforce.</p></div>
+
+  <h3 class="sub" id="migrations-git">Migrations in git: timestamp versions</h3>
+  <p>Sequence numbers collide when two people write migration 04 the same afternoon. Timestamps (<code>yyyyMMddHHmm</code>) are unique without coordination and sort by when they were written.</p>
+  <div class="anatomy">
+    <code><span>git mv</span> <span>migrations/04_add_search_index.sql</span> <span>migrations/202610071517_add_search_index.sql</span></code>
+    <ol><li>rename AND stage it (delete + add in one go)</li><li>old name (your branch's migration only)</li><li>new name: timestamp version, same description</li></ol>
+  </div>
+  <pre class="term"><span class="p">$</span> git branch --show-current
+search
+<span class="p">$</span> git mv migrations/04_add_search_index.sql migrations/202610071517_add_search_index.sql
+<span class="p">$</span> git commit -m "Rename search index migration to timestamp version"
+<span class="p">$</span> git merge main --no-edit          <span class="c"># without --no-edit an editor opens: vim :wq, nano Ctrl+O Enter Ctrl+X</span>
+<span class="p">$</span> ls migrations
+01_create_users.sql  02_add_billing.sql  03_add_full_name.sql  04_add_coupons.sql  202610071517_add_search_index.sql</pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>mv</code> + <code>git commit -am</code> commits the delete but not the new (untracked) file: your migration vanishes from the commit. Use <code>git mv</code>, or <code>git add -A</code>. Rename the <code>.down.sql</code> too when there is one.</p></div>
+  <div class="callout tip"><strong>Tip</strong><p><code>shop.db</code> is usually in <code>.gitignore</code>: git holds the files (the recipe), each database holds its own history (what was cooked).</p></div>
+
+  <h3 class="sub" id="migrations-expand">Expand / backfill / transition / contract</h3>
+  <p>Renaming <code>user_name</code> to <code>full_name</code> while old and new app instances run side by side (quiz 2 Q11):</p>
+  <table class="cmd"><thead><tr><th>Step</th><th>SQL / app</th><th>As a migration</th></tr></thead><tbody>
+    <tr><td>1 Expand</td><td><code>ALTER TABLE users ADD COLUMN full_name text;</code> then app writes both</td><td><code>02_add_full_name.up.sql</code>, down drops it</td></tr>
+    <tr><td>2 Backfill</td><td><code>UPDATE users SET full_name = user_name WHERE full_name IS NULL;</code> (in batches)</td><td>a job, or <code>03_backfill_full_name.up.sql</code></td></tr>
+    <tr><td>3 Transition</td><td>app reads full_name, still writes both</td><td>no SQL</td></tr>
+    <tr><td>4 Contract</td><td><code>ALTER TABLE users DROP COLUMN user_name;</code></td><td><code>04_drop_user_name.up.sql</code>; a good down re-adds AND copies back</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>A single <code>RENAME COLUMN</code> breaks every old instance at once. Backfilling before the app writes both leaves NULLs for rows written meanwhile (Q11 option B).</p></div>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Which rows are in the history table after this?</summary>
+    <div class="body"><p>Files 01, 02, 03 exist. 01 and 02 were applied by Flyway. You run 03's SQL by hand in sqlite3. What does <code>flyway info</code> show for 03, and what does <code>flyway migrate</code> do?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">03 Pending (no history row). migrate runs 03 again -&gt; "duplicate column name" / "already exists", rolled back.</pre><p>The history table only changes when the runner records a migration.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Add a column the Flyway way (default naming)</summary>
+    <div class="body"><p><code>migrations/V1__create_users.sql</code> is applied. Add <code>email TEXT</code> to users.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo 'ALTER TABLE users ADD COLUMN email TEXT;' &gt; migrations/V2__add_email.sql
+<span class="p">$</span> flyway migrate
+<span class="p">$</span> flyway info</pre><p>New change = new file with the next version. Capital V, two underscores.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q17: rename to a timestamp and merge main</summary>
+    <div class="body"><p>On <code>search</code>, which adds <code>04_add_search_index.sql</code>; main has <code>04_add_coupons.sql</code>. Give yours version <code>202610071517</code>, bring main into search, commit. Don't push; leave coupons alone.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git mv migrations/04_add_search_index.sql migrations/202610071517_add_search_index.sql
+<span class="p">$</span> git commit -m "Use timestamp version for search index migration"
+<span class="p">$</span> git merge main --no-edit</pre><p>Checked: the new file at search contains CREATE INDEX, the 04 search file is gone, 04_add_coupons.sql exists, main is merged into search.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q18 (reconstructed): two migrations + two reverse migrations</summary>
+    <div class="body"><p>shop.db has 01 (create orders) and 02 (index) applied, 3 orders. Write 03 adding <code>currency TEXT NOT NULL DEFAULT 'INR'</code>, 04 creating <code>coupons(code TEXT PRIMARY KEY, percent INTEGER NOT NULL)</code>, their down files, and apply with flyway.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR';" &gt; migrations/03_add_currency.up.sql
+<span class="p">$</span> echo "ALTER TABLE orders DROP COLUMN currency;" &gt; migrations/03_add_currency.down.sql
+<span class="p">$</span> echo "CREATE TABLE coupons (code TEXT PRIMARY KEY, percent INTEGER NOT NULL);" &gt; migrations/04_create_coupons.up.sql
+<span class="p">$</span> echo "DROP TABLE coupons;" &gt; migrations/04_create_coupons.down.sql
+<span class="p">$</span> flyway info &amp;&amp; flyway migrate &amp;&amp; flyway info
+<span class="p">$</span> sqlite3 -header -column shop.db "SELECT * FROM orders;"</pre><p>Double quotes outside let you write 'INR' inside. Test downs on a copy (<code>cp shop.db /tmp/t.db</code>), 04 first.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A teammate edited applied migration 02</summary>
+    <div class="body"><p><code>flyway migrate</code> prints "checksum mismatch for migration version 02". The edit (last commit) added <code>billing_email</code> to 02. Fix it without repair and without rewriting history.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git restore --source=HEAD~1 migrations/02_add_billing.up.sql migrations/02_add_billing.down.sql
+<span class="p">$</span> echo "ALTER TABLE users ADD COLUMN billing_email TEXT;" &gt; migrations/03_add_billing_email.up.sql
+<span class="p">$</span> echo "ALTER TABLE users DROP COLUMN billing_email;" &gt; migrations/03_add_billing_email.down.sql
+<span class="p">$</span> flyway migrate
+<span class="p">$</span> git add -A &amp;&amp; git commit -m "Move billing_email into migration 03"</pre><p>Treat an applied migration as immutable history; fix it with the next one.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Your local DB already ran a timestamp migration, then main brings 05</summary>
+    <div class="body"><p>You applied <code>202610261030_create_reviews</code> locally before merging main, which adds <code>05_create_wishlist</code>. <code>flyway migrate</code> refuses. Why, and what do you run?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">Detected resolved migration not applied to database: 05 ... set -outOfOrder=true
+<span class="p">$</span> flyway migrate -outOfOrder=true      <span class="c"># info then shows 05 as "Out of Order"</span></pre><p>Flyway applies in version order; a lower version arriving later is out of order and needs explicit permission.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Down for a contract migration</summary>
+    <div class="body"><p><code>04_drop_user_name.up.sql</code> drops user_name after full_name was backfilled. Write a down that gives back a <i>useful</i> user_name.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">ALTER TABLE users ADD COLUMN user_name text;
+UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Copying works only because full_name still has the values; data that exists nowhere else needs a backup.</p></details>
+    </div></details>
+
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="migrations-01"> <code>labs/06-migrations/01-sqlite-basics</code>
+      <span>sqlite3 prompt, .tables/.schema, one-shot INSERT, save a count with &gt;</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-02"> <code>labs/06-migrations/02-first-migrate</code>
+      <span>flyway info/migrate, read flyway_schema_history, add V2__add_email.sql (default naming)</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-03"> <code>labs/06-migrations/03-down-loses-data</code>
+      <span>run a .down.sql by hand: bio comes back NULL; delete the history row so 02 is Pending</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-04"> <code>labs/06-migrations/04-baseline</code>
+      <span>existing hand-built DB: "no schema history table" -&gt; baseline at 02, then migrate 03</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-05"> <code>labs/06-migrations/05-quiz-timestamp-rename</code>
+      <span>Quiz 2 Q17: git mv 04_add_search_index to 202610071517_..., merge main into search</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-06"> <code>labs/06-migrations/06-quiz-orders-up-down</code>
+      <span>Quiz 2 Q18 reconstruction: 03/04 up + down files on orders, apply with flyway</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-07"> <code>labs/06-migrations/07-quiz-checksum-mismatch</code>
+      <span>applied 02 was edited: restore it from git, move the change into 03, migrate, commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-08"> <code>labs/06-migrations/08-quiz-hand-run-sql</code>
+      <span>Quiz 2 Q8 made real: hand-run ALTER makes migrate fail; get 03 recorded properly</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-09"> <code>labs/06-migrations/09-twist-expand-contract</code>
+      <span>user_name -&gt; full_name in staged migrations (-target), backfill, contract, repairing down</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-10"> <code>labs/06-migrations/10-twist-two-branches-05</code>
+      <span>two branches both add 05: rename up+down to a timestamp, merge, migrate both</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"</code> once per terminal, then <code>cd work</code></li>
+    <li><code>flyway info</code> what is applied / pending (start and end with it)</li>
+    <li><code>flyway migrate</code> run pending migrations in order, record history rows</li>
+    <li><code>flyway migrate -target=03</code> stop at version 03</li>
+    <li><code>flyway validate</code> files vs history (checksums); fails if something is pending</li>
+    <li><code>flyway repair</code> accept edited checksums / drop failed rows. Runs no SQL. Last resort.</li>
+    <li><code>flyway baseline -baselineVersion=02</code> adopt an existing DB</li>
+    <li><code>flyway migrate -outOfOrder=true</code> apply a lower version that arrived late</li>
+    <li><code>03_add_x.up.sql</code> / <code>03_add_x.down.sql</code> course naming; <code>V3__add_x.sql</code> Flyway default</li>
+    <li><code>sqlite3 shop.db</code> then <code>.tables</code> <code>.schema t</code> <code>.quit</code>; SQL ends with <code>;</code></li>
+    <li><code>sqlite3 -header -column shop.db "SELECT * FROM flyway_schema_history;"</code> read the history</li>
+    <li><code>sqlite3 shop.db &lt; file.sql</code> run a down file by hand (on a copy to test)</li>
+    <li><code>sqlite3 shop.db "DELETE FROM flyway_schema_history WHERE version='03';"</code> after running 03's down</li>
+    <li>Never edit an applied migration: write the next one</li>
+    <li>Hand-run SQL = schema changed, no history row = runner fails with "already exists"</li>
+    <li>Down of DROP COLUMN = column back, all NULL. Only a backup restores values.</li>
+    <li><code>git mv old new</code> + commit, then <code>git merge main --no-edit</code> (timestamp rename)</li>
+    <li>Rename: expand -&gt; backfill -&gt; transition -&gt; contract</li>
+  </ul></div>
+</section>

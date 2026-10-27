@@ -1,0 +1,341 @@
+<section class="topic" id="docker" data-title="Docker">
+  <header class="topic-head">
+    <span class="tag">Topic 4</span>
+    <h2>Docker: build, run, publish, persist</h2>
+    <p class="lede">Build an image from a Dockerfile, run it with the right ports and volumes, and debug it when curl gets nothing.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p><b>Image</b> = an immutable, tagged stack of read-only layers plus a default command (a recipe that is already cooked).
+    <b>Container</b> = a running instance of an image: ordinary Linux processes, plus their own namespaces, cgroup limits and a thin <b>writable layer</b> on top.
+    <b>Volume</b> = Docker-managed storage with its own lifecycle: it outlives any container.
+    <b>Namespaces = what a process can see</b> (own PIDs, own filesystem, own network). <b>cgroups = how much it can use</b> (CPU, memory).
+    All containers share the host's kernel. Every command in this topic is one of: make an image (<code>build</code>), make a container (<code>run</code>), look at it (<code>ps</code>, <code>logs</code>, <code>exec</code>, <code>inspect</code>), or remove things (<code>stop</code>, <code>rm</code>, <code>image rm</code>, <code>volume rm</code>).</p>
+  </div>
+
+  <!-- ===================== BUILD ===================== -->
+  <h3 class="sub" id="docker-build">docker build: the trailing dot</h3>
+  <p>In Quiz 2 Q14, <code>docker build -t counter:1.0</code> (no dot) scored 0. The dot is not decoration. It is the <b>build context</b>: the folder Docker packs up and sends to the builder. Every <code>COPY</code> in the Dockerfile copies <i>from the context</i>. No context, no build. Docker also looks for the file called <code>Dockerfile</code> inside the context unless you say otherwise with <code>-f</code>.</p>
+
+  <div class="anatomy">
+    <code><span>docker build</span> <span>-t counter:1.0</span> <span>.</span></code>
+    <ol>
+      <li>the command: turn a Dockerfile into an image</li>
+      <li><code>-t name:tag</code> = the image's name and version. Name must be lowercase. No tag means <code>:latest</code>.</li>
+      <li><code>.</code> = build context = "this folder" (the one you are standing in). Required. It is the one argument the error message talks about.</li>
+    </ol>
+  </div>
+
+  <div class="anatomy">
+    <code><span>docker build</span> <span>-t hello-cli:dev</span> <span>-f Dockerfile.dev</span> <span>.</span></code>
+    <ol>
+      <li>build</li>
+      <li>tag</li>
+      <li><code>-f</code> = which Dockerfile to read (default: <code>./Dockerfile</code>)</li>
+      <li>the context is <b>still needed</b>: <code>-f</code> picks the recipe, <code>.</code> gives the ingredients</li>
+    </ol>
+  </div>
+
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker build -t app:1.0 .</code></td><td>build from ./Dockerfile, context = current folder</td></tr>
+      <tr><td><code>docker build -t app:dev -f Dockerfile.dev .</code></td><td>build from another Dockerfile</td></tr>
+      <tr><td><code>docker build -t app:1.0 ./backend</code></td><td>context = the backend folder (its Dockerfile is used)</td></tr>
+      <tr><td><code>docker image ls</code> (or <code>docker images</code>)</td><td>list images; <code>docker image ls app</code> shows only that repository</td></tr>
+      <tr><td><code>docker image rm app:1.0</code> (or <code>docker rmi</code>)</td><td>delete an image tag. Fails if a container (even stopped) uses it.</td></tr>
+      <tr><td><code>docker history app:1.0</code></td><td>the layers of an image, newest first (shows the build steps)</td></tr>
+      <tr><td><code>docker pull node:24-alpine</code></td><td>download an image from a registry (build and run do this automatically)</td></tr>
+    </tbody></table>
+
+  <pre class="term"><span class="p">$</span> docker build -t counter:1.0
+ERROR: docker: 'docker buildx build' requires 1 argument
+
+Usage:  docker buildx build [OPTIONS] PATH | URL | -
+<span class="c"># PATH is the missing build context. Add the dot:</span>
+<span class="p">$</span> docker build -t counter:1.0 .
+#5 [2/5] WORKDIR /app
+#6 [3/5] COPY package.json package-lock.json ./
+...
+#10 naming to docker.io/library/counter:1.0 done
+<span class="p">$</span> docker image ls counter
+IMAGE         ID             DISK USAGE   CONTENT SIZE
+counter:1.0   3f1a...        245MB        62.9MB</pre>
+
+  <div class="callout trap"><strong>Trap</strong><p><code>docker build -t app:dev Dockerfile.dev</code> treats <code>Dockerfile.dev</code> as the context <i>folder</i>: <code>unable to prepare context: path "Dockerfile.dev" not found</code>. A file goes after <code>-f</code>; the last argument is always a folder.</p></div>
+
+  <!-- ===================== DOCKERFILE ===================== -->
+  <h3 class="sub" id="docker-dockerfile">Dockerfile instructions and the layer cache</h3>
+  <p>A Dockerfile is a list of steps. Most steps create a <b>layer</b>. Layers are read-only and shared: 100 containers from one image use the same layers on disk (copy-on-write); each container only adds its own thin writable layer.</p>
+
+  <table class="cmd"><thead><tr><th>Instruction</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>FROM node:24-alpine</code></td><td>the base image: user space + Node runtime. Always first.</td></tr>
+      <tr><td><code>WORKDIR /app</code></td><td>"cd" for all later steps (created if missing). Relative paths like <code>./</code> mean <code>/app/</code>.</td></tr>
+      <tr><td><code>COPY package.json package-lock.json ./</code></td><td>copy files <b>from the build context</b> into the image</td></tr>
+      <tr><td><code>RUN npm ci --omit=dev</code></td><td>runs <b>at build time</b>; its result is saved as a layer</td></tr>
+      <tr><td><code>ENV MODE=dev</code></td><td>environment variable baked into the image (override at run with <code>-e</code>)</td></tr>
+      <tr><td><code>EXPOSE 3000</code></td><td><b>documents</b> the port. It does <b>not</b> publish it. Only <code>-p</code> on <code>docker run</code> publishes.</td></tr>
+      <tr><td><code>CMD ["node", "server.js"]</code></td><td>the default command when a container <b>starts</b>. Not run at build time. Replaced by any command typed after the image name in <code>docker run</code>.</td></tr>
+    </tbody></table>
+
+  <p><b>The cache rule:</b> a changed input invalidates that step <b>and every step after it</b>. So put what changes rarely (dependency manifests and the install) before what changes often (your source).</p>
+
+  <pre class="term"><span class="c"># GOOD ORDER (the slide / Quiz 2 Q15 answer)</span>
+FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./   <span class="c"># 1. only the manifests</span>
+RUN npm ci                               <span class="c"># 2. install; cached while the manifests don't change</span>
+COPY . .                                 <span class="c"># 3. source last: editing server.js only reruns from here</span>
+EXPOSE 3000
+CMD ["node", "server.js"]</pre>
+
+  <pre class="term"><span class="c"># after editing only server.js:</span>
+<span class="p">$</span> docker build -t shop-api:1.0 .
+#6 [2/5] WORKDIR /app
+#6 CACHED
+#7 [3/5] COPY package.json package-lock.json ./
+#7 CACHED
+#8 [4/5] RUN npm ci
+#8 CACHED
+#9 [5/5] COPY . .                                  <span class="c"># reruns (its input changed)</span></pre>
+
+  <div class="callout why"><strong>Why</strong><p><code>RUN npm ci</code> before <code>COPY package*.json</code> fails: when the RUN step executes, <code>/app</code> is empty, so there is no lockfile. <code>COPY . .</code> before <code>RUN npm ci</code> builds, but every server.js edit changes the input of <code>COPY . .</code>, so npm ci reruns every time (slow). <code>npm ci</code> installs exactly what <code>package-lock.json</code> pins, and refuses to run without it.</p></div>
+
+  <p><b>.dockerignore</b> lists what to leave out of the build context, like <code>.gitignore</code>. Typical: <code>node_modules</code>, <code>.git</code>, <code>.env</code>, <code>data</code>. Keeps secrets out of the image, keeps the context small, and stops your laptop's <code>node_modules</code> from overwriting the one built inside the image by <code>COPY . .</code>.</p>
+
+  <div class="err"><pre>npm error The `npm ci` command can only install with an existing package-lock.json or
+npm error npm-shrinkwrap.json with lockfileVersion &gt;= 1.
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci" did not complete successfully: exit code: 1</pre><p><b>Means:</b> the lockfile isn't in the image when <code>RUN npm ci</code> runs (wrong step order, or the lockfile is missing from the folder / excluded by .dockerignore).</p><p><b>Fix:</b> <code>COPY package.json package-lock.json ./</code> before <code>RUN npm ci</code>.</p></div>
+
+  <!-- ===================== RUN ===================== -->
+  <h3 class="sub" id="docker-run">docker run: options before the image, command after</h3>
+  <p><code>docker run</code> = create a new container from an image and start it. Each <code>run</code> makes a <b>new</b> container with a fresh, empty writable layer.</p>
+
+  <div class="anatomy">
+    <code><span>docker run</span> <span>-d</span> <span>-p 8080:3000</span> <span>-v counter-data:/data</span> <span>--name counter</span> <span>counter:1.0</span></code>
+    <ol>
+      <li>create + start a new container</li>
+      <li><code>-d</code> = detached: run in the background, print the container id, give the terminal back</li>
+      <li><code>-p HOST:CONTAINER</code> = publish: traffic to host port 8080 goes to container port 3000</li>
+      <li><code>-v VOLUME:/path</code> = mount the named volume <code>counter-data</code> at <code>/data</code> inside</li>
+      <li><code>--name</code> = a name to use instead of the id (must be unique among all containers)</li>
+      <li>the image. <b>Everything after this word is the command to run inside the container</b>, replacing CMD.</li>
+    </ol>
+  </div>
+
+  <div class="callout trap"><strong>Trap: options after the image</strong><p><code>docker run -d counter:1.0 -p 8080:3000 -v counter-data:/data</code> does <b>not</b> publish anything. <code>-p 8080:3000 -v ...</code> becomes the container's command. With node images it runs <code>node -p 8080:3000 -v ...</code>, prints the Node version and exits: <code>docker ps</code> is empty, <code>docker ps -a</code> says <code>Exited (0)</code>, <code>docker logs</code> shows <code>v24.x.x</code>. With alpine: <code>exec: "-p": executable file not found in $PATH</code>. Rule: <code>docker run [options] IMAGE [command]</code>.</p></div>
+
+  <table class="cmd"><thead><tr><th>Option</th><th>What it does / why</th></tr></thead>
+    <tbody>
+      <tr><td><code>-d</code></td><td>background. Without it your terminal shows the app's output; Ctrl+C stops the app.</td></tr>
+      <tr><td><code>-p 8080:3000</code></td><td>publish on every host interface (PORTS shows <code>0.0.0.0:8080-&gt;3000/tcp</code>). Order: <b>host first</b>.</td></tr>
+      <tr><td><code>-p 127.0.0.1:8080:3000</code></td><td>publish only on the host's loopback: reachable from this machine only, not from the network</td></tr>
+      <tr><td><code>-p 127.0.0.1::3000</code></td><td>let Docker pick a free host port (see it with <code>docker port NAME</code>)</td></tr>
+      <tr><td><code>--name web</code></td><td>name the container</td></tr>
+      <tr><td><code>-e KEY=value</code></td><td>set an environment variable inside (config, not baked in the image)</td></tr>
+      <tr><td><code>-v data:/data</code></td><td>left side is a <b>name</b> (no <code>/</code>) = named volume</td></tr>
+      <tr><td><code>-v "$(pwd)"/data:/data</code></td><td>left side is a <b>path</b> = bind mount of a host folder</td></tr>
+      <tr><td><code>--mount type=volume,src=data,dst=/data</code></td><td>long, explicit form of the named volume (no spaces after commas!)</td></tr>
+      <tr><td><code>--mount type=bind,src="$(pwd)"/data,dst=/data</code></td><td>long form of a bind mount (path must exist)</td></tr>
+      <tr><td><code>--rm</code></td><td>delete the container automatically when it exits (one-shot tasks)</td></tr>
+      <tr><td><code>-it IMAGE sh</code></td><td><code>-i</code> keep input open + <code>-t</code> a terminal: an interactive shell. <code>exit</code> leaves (and stops the container, since sh is PID 1).</td></tr>
+      <tr><td><code>--cpus=0.5</code></td><td>cgroup CPU cap: half a CPU. Over it = <b>throttled</b> (keeps running, slower).</td></tr>
+      <tr><td><code>--memory=512m</code></td><td>cgroup memory cap. Over it = the kernel may <b>kill</b> the process. Needs a unit (<code>m</code>, <code>g</code>).</td></tr>
+    </tbody></table>
+
+  <pre class="term"><span class="p">$</span> docker run --rm alpine:3.24 echo "Hello from a pulled image"
+Hello from a pulled image                     <span class="c"># command after the image replaced CMD; --rm cleaned up</span>
+<span class="p">$</span> docker run --rm -it --name pid1 alpine:3.24 sh
+/ # ps
+PID   USER     TIME  COMMAND
+    1 root      0:00 sh                      <span class="c"># PID 1 inside its own PID namespace</span>
+/ # exit</pre>
+
+  <div class="callout trap"><strong>Trap: redirects run on the host</strong><p><code>docker run --rm -v notes-data:/data alpine:3.24 echo hi &gt; /data/x.txt</code>: your <i>host</i> shell does the <code>&gt;</code> before Docker even starts: <code>bash: /data/x.txt: No such file or directory</code>. Put it inside: <code>... alpine:3.24 sh -c 'echo hi &gt; /data/x.txt'</code>.</p></div>
+
+  <!-- ===================== PORTS ===================== -->
+  <h3 class="sub" id="docker-ports">Ports: ps, EXPOSE vs -p, 0.0.0.0 vs 127.0.0.1, curl</h3>
+  <p>A request from your laptop goes: <code>curl</code> -&gt; host port -&gt; published-port rule -&gt; container's own IP : container port -&gt; the server, which must be listening there.</p>
+
+  <pre class="term"><span class="p">$</span> docker ps
+CONTAINER ID   IMAGE         STATUS         PORTS                                          NAMES
+8dbd4e173097   counter:1.0   Up 2 minutes   0.0.0.0:8080-&gt;3000/tcp, [::]:8080-&gt;3000/tcp    counter
+1b2c3d4e5f60   t3demo:1      Up 5 seconds   3000/tcp                                       t3web
+9f8e7d6c5b4a   greeter:1.0   Up 1 minute    127.0.0.1:8081-&gt;3000/tcp                       greeter-web
+<span class="p">$</span> curl http://localhost:8080/
+count=1</pre>
+  <table class="cmd"><thead><tr><th>PORTS column</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>3000/tcp</code></td><td>EXPOSEd only. <b>Nothing is published.</b> curl from the host can't reach it. (The <code>[::]</code> twin is the same rule for IPv6.)</td></tr>
+      <tr><td><code>0.0.0.0:8080-&gt;3000/tcp</code></td><td>published: host port 8080 on all interfaces -&gt; container 3000</td></tr>
+      <tr><td><code>127.0.0.1:8081-&gt;3000/tcp</code></td><td>published on the host loopback only</td></tr>
+      <tr><td>(empty)</td><td>container not running, or no ports at all. Check <code>docker ps -a</code>.</td></tr>
+    </tbody></table>
+
+  <div class="callout trap"><strong>Trap: the server listens on 127.0.0.1 inside the container</strong><p>Quiz 2 Q5. <code>docker ps</code> looks perfect (<code>0.0.0.0:8080-&gt;3000/tcp</code>) but <code>curl</code> says <code>(52) Empty reply from server</code> or <code>Connection reset</code>. Inside a container, 127.0.0.1 is the <b>container's own</b> loopback (its own network namespace). Forwarded traffic arrives on the container's network address, so a server bound to 127.0.0.1 never sees it. Fix the app to listen on <code>0.0.0.0</code>, rebuild, and <b>recreate</b> the container. Adding <code>EXPOSE</code> changes nothing.</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>Two different "127.0.0.1"s: <code>-p 127.0.0.1:8080:3000</code> limits the <b>host</b> side (good, safe). <code>listen(3000, "127.0.0.1")</code> in the app limits the <b>container</b> side (bad: unreachable). Check what the app says with <code>docker logs NAME</code>.</p></div>
+
+  <!-- ===================== STORAGE ===================== -->
+  <h3 class="sub" id="docker-storage">Storage: writable layer, volumes, bind mounts, what survives</h3>
+  <p>Files a container writes go to its private writable layer, unless the path is a mount. The writable layer lives exactly as long as the container. A named volume lives until you <code>docker volume rm</code> it.</p>
+
+  <table class="cmd"><thead><tr><th>Action</th><th>Writable layer (e.g. /tmp/session.log)</th><th>Named volume (e.g. /data/count.txt)</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker stop</code> then <code>docker start</code></td><td>kept (same container)</td><td>kept</td></tr>
+      <tr><td><code>docker restart</code></td><td>kept (same container)</td><td>kept</td></tr>
+      <tr><td><code>docker rm</code> + a new <code>docker run</code></td><td><b>gone</b> (new container, empty layer)</td><td>kept: the new container sees it again</td></tr>
+      <tr><td><code>docker volume rm</code></td><td>-</td><td><b>gone</b> (refused while any container, even stopped, uses it)</td></tr>
+    </tbody></table>
+
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker volume create counter-data</code></td><td>make a named volume</td></tr>
+      <tr><td><code>docker volume ls</code></td><td>list volumes</td></tr>
+      <tr><td><code>docker volume inspect counter-data</code></td><td>details; <code>Mountpoint</code> = where Docker keeps it on the host (/var/lib/docker/volumes/...)</td></tr>
+      <tr><td><code>docker volume rm counter-data</code></td><td>delete it and its data, permanently</td></tr>
+      <tr><td><code>docker run --rm -v counter-data:/data alpine:3.24 cat /data/count.txt</code></td><td>peek into a volume with a throw-away container</td></tr>
+    </tbody></table>
+  <div class="callout why"><strong>Why named volume vs bind mount</strong><p><b>Named volume</b>: Docker manages where it lives; lifecycle separate from containers; use for app data (databases, counters). <b>Bind mount</b>: a specific host folder mapped in; use in development when the host path itself matters (live-edit code). <code>-v name:/data</code> vs <code>-v /abs/path:/data</code>: a leading <code>/</code> (or <code>./</code>, <code>$(pwd)</code>) silently switches to a bind mount.</p></div>
+
+  <!-- ===================== INSPECT ===================== -->
+  <h3 class="sub" id="docker-inspect">Look inside: ps -a, logs, exec, top, inspect, stop/rm</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker ps</code> / <code>docker ps -a</code></td><td>running containers / <b>all</b> (incl. Exited and Created). Always check <code>-a</code> when something "disappeared".</td></tr>
+      <tr><td><code>docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'</code></td><td>only the columns you want</td></tr>
+      <tr><td><code>docker ps --filter ancestor=counter:1.0</code></td><td>only containers from that image (also <code>name=</code>, <code>volume=</code>, <code>status=exited</code>)</td></tr>
+      <tr><td><code>docker port web</code></td><td>which host port maps to which container port</td></tr>
+      <tr><td><code>docker logs web</code> / <code>docker logs -f web</code></td><td>what the app printed (stdout/stderr). <code>-f</code> = follow live; Ctrl+C stops following, not the container.</td></tr>
+      <tr><td><code>docker exec web cat /data/count.txt</code></td><td>run a command <b>inside</b> a <b>running</b> container</td></tr>
+      <tr><td><code>docker exec -it web sh</code></td><td>a shell inside; <code>exit</code> leaves it, the container keeps running (sh is not PID 1 here)</td></tr>
+      <tr><td><code>docker top web</code></td><td>the container's processes with their <b>host</b> PIDs</td></tr>
+      <tr><td><code>docker inspect web</code></td><td>everything as JSON (image, mounts, ports, env, limits, state)</td></tr>
+      <tr><td><code>docker inspect -f '{{.State.Status}}' web</code></td><td>one field. Others: <code>{{.Config.Image}}</code>, <code>{{.State.Pid}}</code>, <code>{{json .Mounts}}</code>, <code>{{json .Config.Env}}</code>, <code>{{.HostConfig.Memory}}</code></td></tr>
+      <tr><td><code>docker stop web</code> / <code>docker start web</code></td><td>stop the process (container kept, name + port bindings kept) / start the same container again</td></tr>
+      <tr><td><code>docker rm web</code> / <code>docker rm -f web</code></td><td>delete a stopped container / stop and delete in one go. Frees the name.</td></tr>
+    </tbody></table>
+
+  <pre class="term"><span class="p">$</span> docker exec notes-api ps
+PID   USER     TIME  COMMAND
+    1 root      0:00 node server.js          <span class="c"># PID 1 inside (PID namespace)</span>
+<span class="p">$</span> docker top notes-api
+UID    PID      PPID     C   STIME   TTY   TIME       CMD
+root   809000   808976   0   22:11   ?     00:00:00   node server.js   <span class="c"># same process, host PID</span>
+<span class="p">$</span> docker inspect -f '{{.State.Pid}}' notes-api
+809000</pre>
+  <div class="callout tip"><strong>Tip</strong><p>A container lives as long as its PID 1. If <code>docker ps</code> doesn't show your container, run <code>docker ps -a</code> and <code>docker logs NAME</code>: the main process exited (crash, wrong command, or options typed after the image).</p></div>
+
+  <!-- ===================== ERRORS ===================== -->
+  <h3 class="sub" id="docker-errors">Common errors, decoded</h3>
+  <div class="err"><pre>ERROR: docker: 'docker buildx build' requires 1 argument</pre><p><b>Means:</b> no build context given.</p><p><b>Fix:</b> add <code>.</code> at the end: <code>docker build -t counter:1.0 .</code></p></div>
+  <div class="err"><pre>docker: Error response from daemon: ... Bind for 0.0.0.0:8080 failed: port is already allocated</pre><p><b>Means:</b> another running container already publishes host port 8080. Docker has <b>already created</b> your new container (status <code>Created</code>) before failing.</p><p><b>Fix:</b> <code>docker ps</code> to find who holds 8080; <code>docker stop</code> or <code>docker rm -f</code> it (or use another host port if allowed); then <code>docker rm</code> your half-made container and run again.</p></div>
+  <div class="err"><pre>docker: Error response from daemon: Conflict. The container name "/orders" is already in use by container "8da5...". You have to remove (or rename) that container to be able to reuse that name.</pre><p><b>Means:</b> a container with that name exists, maybe stopped or Created (<code>docker ps -a</code>).</p><p><b>Fix:</b> <code>docker rm orders</code> (or <code>rm -f</code> if running), then run again. <code>docker start orders</code> would restart the <i>old</i> container, not a new one from a new image.</p></div>
+  <div class="err"><pre>Unable to find image 'countr:1.0' locally
+docker: Error response from daemon: pull access denied for countr, repository does not exist or may require 'docker login'</pre><p><b>Means:</b> no local image with that exact name:tag, so Docker tried to download it from Docker Hub and it doesn't exist there either. Usually a typo, a wrong tag, or you never built it.</p><p><b>Fix:</b> <code>docker image ls</code>, use the exact name:tag (or build it first).</p></div>
+  <div class="err"><pre>ERROR: failed to build: invalid tag "Counter:1.0": repository name must be lowercase</pre><p><b>Means:</b> image names must be lowercase (tags may have letters, digits, <code>. _ -</code>).</p><p><b>Fix:</b> <code>-t counter:1.0</code>.</p></div>
+  <div class="err"><pre>node: bad option: --name        (in docker logs; container Exited)
+exec: "--name": executable file not found in $PATH</pre><p><b>Means:</b> you put options after the image name; they became the command.</p><p><b>Fix:</b> <code>docker rm</code> it, then put every option before the image.</p></div>
+  <div class="err"><pre>Error response from daemon: remove counter-data: volume is in use - [8dbd4e17...]
+Error response from daemon: conflict: unable to delete counter:1.0 (must be forced) - image is being used by stopped container 8dbd4e17</pre><p><b>Means:</b> a container (even a stopped one) still uses it.</p><p><b>Fix:</b> <code>docker rm -f</code> the container first, then remove the volume / image.</p></div>
+  <div class="err"><pre>invalid argument "type=volume," for "--mount" flag: invalid field '' must be a key=value pair</pre><p><b>Means:</b> spaces after commas in <code>--mount</code> split it into separate words.</p><p><b>Fix:</b> <code>--mount type=volume,src=data,dst=/data</code> with no spaces.</p></div>
+  <div class="err"><pre>curl: (7) Failed to connect to localhost port 8080: Connection refused
+curl: (52) Empty reply from server</pre><p><b>Means:</b> (7) nothing published on that host port (no <code>-p</code>, wrong port, or container not running). (52)/(56) the port is published but the app inside listens on 127.0.0.1 or crashed.</p><p><b>Fix:</b> check <code>docker ps</code> PORTS, then <code>docker logs</code>.</p></div>
+
+  <!-- ===================== SCENARIOS ===================== -->
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 2 Q14: build, volume, run the counter</summary>
+    <div class="body"><p>Your folder has a Dockerfile for a small counter service. No image, volume or container exists yet. Build it as <code>counter:1.0</code>, create volume <code>counter-data</code>, start a container in the background that publishes host 8080 to container 3000 and mounts <code>counter-data</code> at <code>/data</code>. Don't stop or remove it.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker build -t counter:1.0 .
+<span class="p">$</span> docker volume create counter-data
+<span class="p">$</span> docker run -d --name counter -p 8080:3000 -v counter-data:/data counter:1.0
+<span class="p">$</span> docker ps
+... Up 2 seconds   0.0.0.0:8080-&gt;3000/tcp, [::]:8080-&gt;3000/tcp   counter
+<span class="p">$</span> curl http://localhost:8080/
+count=1</pre><p>Dot = build context. All options before the image. <code>8080:3000</code> = host:container. The name <code>counter-data</code> without a slash = named volume.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 2 Q15: reorder the shop-api Dockerfile</summary>
+    <div class="body"><p>The Dockerfile is <code>FROM / WORKDIR /app / RUN npm ci / COPY package.json package-lock.json ./ / COPY . . / EXPOSE 3000 / CMD</code>. The build fails. Only reorder lines so it builds and a server.js-only change doesn't rerun npm ci. Build <code>shop-api:1.0</code>. Don't run a container.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">FROM node:24-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+EXPOSE 3000
+CMD ["node", "server.js"]
+<span class="p">$</span> docker build -t shop-api:1.0 .</pre><p>npm ci needs the lockfile in the image first. Source is copied last so its changes only invalidate <code>COPY . .</code> and later steps.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Which steps rerun?</summary>
+    <div class="body"><p>Dockerfile: <code>FROM node:24-alpine</code>, <code>WORKDIR /app</code>, <code>COPY package.json package-lock.json ./</code>, <code>RUN npm ci --omit=dev</code>, <code>COPY server.js ./</code>, <code>CMD ["node","server.js"]</code>. (a) You edit server.js. (b) You add a dependency (package.json + lockfile change). What reruns in each case?</p>
+      <details class="answer"><summary>Show answer</summary><p>(a) <code>COPY server.js ./</code> and everything after it (CMD only records metadata). (b) <code>COPY package.json package-lock.json ./</code>, <code>RUN npm ci</code>, <code>COPY server.js</code> and the rest: a changed input invalidates that step and every step after it. FROM and WORKDIR are cached in both.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What is the count after rm?</summary>
+    <div class="body"><p><code>docker run -d --name c -v t3data:/data counter:1.0</code>. Three requests: count.txt = 3, and each request also writes a line to <code>/tmp/session.log</code>. You <code>docker rm -f c</code> and run the same command again, then send one request. Count? Old log lines? And what if you had done <code>docker stop c</code> + <code>docker start c</code> instead?</p>
+      <details class="answer"><summary>Show answer</summary><p>After rm + run: <b>count=4</b> (the volume survived), old log lines are <b>gone</b> (/tmp was in the deleted writable layer). After stop + start: count=4 and the log lines are <b>still there</b> (same container, same writable layer).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Up, published, still unreachable</summary>
+    <div class="body"><p><code>docker run -d -p 8080:3000 --name web app:1.0</code>. <code>docker ps</code> shows <code>0.0.0.0:8080-&gt;3000/tcp</code>, but <code>curl localhost:8080</code> gets an empty reply. <code>docker logs web</code> says <code>listening on 127.0.0.1:3000</code>. Fix it.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="c"># in server.js: .listen(3000, "0.0.0.0")</span>
+<span class="p">$</span> docker build -t app:1.1 .
+<span class="p">$</span> docker rm -f web
+<span class="p">$</span> docker run -d -p 8080:3000 --name web app:1.1
+<span class="p">$</span> curl localhost:8080</pre><p>127.0.0.1 inside the container is the container's own loopback. A new image needs a new container: restart would reuse the old image.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Port taken and name taken</summary>
+    <div class="body"><p><code>orders-old</code> (v1) is running on 8090. A stopped container named <code>orders</code> exists. Run <code>orders:2.0</code> as <code>orders</code> on 8090 -&gt; 3000. Keep <code>orders-old</code> (stopped) for its logs.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker stop orders-old           <span class="c"># frees port 8090, keeps container + logs</span>
+<span class="p">$</span> docker rm orders                  <span class="c"># frees the name</span>
+<span class="p">$</span> docker run -d --name orders -p 8090:3000 orders:2.0</pre><p>Ports belong to running containers; names belong to all containers. If you run first, you get <code>Conflict ... name already in use</code>, then <code>port is already allocated</code> (which leaves a Created container you must rm).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Namespaces or cgroups?</summary>
+    <div class="body"><p><code>docker run -d --cpus=0.5 --memory=512m --name api api:1.0</code>. (a) Inside, what PID does the main process have? (b) It wants 2 CPUs. (c) It allocates 1 GB. (d) What hides the host's other processes?</p>
+      <details class="answer"><summary>Show answer</summary><p>(a) PID 1 inside (PID namespace); another PID on the host (<code>docker top api</code>). (b) Throttled: keeps running, slower. (c) The kernel may kill it (OOM), not just slow it. (d) Namespaces (what you see), not cgroups (how much you use).</p></details>
+    </div></details>
+
+  <!-- ===================== LABS ===================== -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="docker-01"> <code>labs/04-docker/01-build-tag</code>
+      <span>Build with -t and the build context dot; second image with -f Dockerfile.dev; run with --rm</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-02"> <code>labs/04-docker/02-run-publish</code>
+      <span>docker run -d --name -p 127.0.0.1:8081:3000 -e, then curl</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-03"> <code>labs/04-docker/03-inspect-running</code>
+      <span>Find host port, a token in logs, a file via exec, the host PID of PID 1</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-04"> <code>labs/04-docker/04-volume-basics</code>
+      <span>Named volume + one-shot --rm containers; sh -c for redirects inside</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-05"> <code>labs/04-docker/05-quiz-counter</code>
+      <span>Quiz 2 Q14: build counter:1.0, volume counter-data, run -d -p 8080:3000 at /data</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-06"> <code>labs/04-docker/06-quiz-shop-api-order</code>
+      <span>Quiz 2 Q15: reorder the Dockerfile so npm ci works and stays cached</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-07"> <code>labs/04-docker/07-quiz-survives-rm</code>
+      <span>stop/start vs rm with --mount volume, --cpus and --memory; count must reach 5</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-08"> <code>labs/04-docker/08-twist-unreachable</code>
+      <span>Container Up and published but server bound to 127.0.0.1: fix, rebuild, recreate</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-09"> <code>labs/04-docker/09-twist-port-taken</code>
+      <span>Deploy v2 on 8090 through "name already in use" and "port is already allocated"</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <!-- ===================== CHEAT ===================== -->
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>docker build -t name:tag .</code> build; the dot = build context (required)</li>
+    <li><code>docker build -t name:tag -f Other.Dockerfile .</code> another Dockerfile, still the dot</li>
+    <li><code>docker image ls</code> / <code>docker image rm name:tag</code> / <code>docker history name:tag</code></li>
+    <li><code>docker run -d --name n -p 8080:3000 -v vol:/data -e K=v image:tag</code> options BEFORE the image</li>
+    <li><code>-p 127.0.0.1:8080:3000</code> host-only publish; order is HOST:CONTAINER</li>
+    <li><code>--mount type=volume,src=vol,dst=/data</code> long form (no spaces)</li>
+    <li><code>docker run --rm -it image sh</code> throw-away interactive shell</li>
+    <li><code>--cpus=0.5 --memory=512m</code> cgroup limits: CPU throttles, memory may kill</li>
+    <li><code>docker ps</code> / <code>docker ps -a</code> running / all; read the PORTS column</li>
+    <li><code>docker logs -f n</code> / <code>docker exec n cmd</code> / <code>docker exec -it n sh</code></li>
+    <li><code>docker top n</code> / <code>docker inspect -f '{{.State.Pid}}' n</code> host view of PID 1</li>
+    <li><code>docker stop n</code> + <code>docker start n</code> same container, data kept</li>
+    <li><code>docker rm -f n</code> container + writable layer gone; volumes stay</li>
+    <li><code>docker volume create|ls|inspect|rm vol</code></li>
+    <li><code>EXPOSE</code> documents only; <code>-p</code> publishes; app must listen on <code>0.0.0.0</code></li>
+    <li>Dockerfile order: <code>FROM, WORKDIR, COPY package*.json ./, RUN npm ci, COPY . ., EXPOSE, CMD</code></li>
+    <li><code>curl http://localhost:8080/</code> test from the host</li>
+  </ul></div>
+</section>

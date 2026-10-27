@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+source "$(dirname "$0")/../../lib/common.sh"
+source "$LAB_DIR/../_mig.sh"
+need_docker
+fresh_work
+toml_course
+mkdir migrations
+echo "CREATE TABLE users (id INTEGER PRIMARY KEY, user_name TEXT NOT NULL, bio TEXT);" > migrations/01_create_users.up.sql
+echo "DROP TABLE users;"                     > migrations/01_create_users.down.sql
+echo "ALTER TABLE users DROP COLUMN bio;"    > migrations/02_drop_bio.up.sql
+echo "ALTER TABLE users ADD COLUMN bio text;" > migrations/02_drop_bio.down.sql
+fw migrate -target=01
+sqlite3 shop.db "INSERT INTO users VALUES (1,'Asha','Likes chess'), (2,'Ravi','Builds robots');"
+fw migrate
+path_tip
+banner "06-migrations / 03-down-loses-data (Drill)"

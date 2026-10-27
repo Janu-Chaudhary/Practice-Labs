@@ -1,0 +1,115 @@
+<section class="topic" id="start" data-title="Start here">
+  <header class="topic-head">
+    <span class="tag">Start here</span>
+    <h2>How to use this pack</h2>
+    <p class="lede">Read a topic, then do its labs in a real terminal until the commands come without thinking.</p>
+  </header>
+
+  <div class="model"><h3>The idea</h3>
+    <p>You already understand the concepts. What's missing is <b>reps</b>: typing the commands yourself, seeing the real errors, and fixing them.
+    Every topic here has a short guide <i>and</i> practice labs on your laptop that grade you the way the quiz checker does.
+    Reading alone won't fix this. Doing will.</p>
+  </div>
+
+  <h3 class="sub" id="start-loop">The loop for every topic</h3>
+  <ol class="steps">
+    <li><b>Read</b> the topic's mental model and command tables (10–15 min). Don't memorise yet.</li>
+    <li><b>Do the labs in order</b>: Drill → Quiz-style → Twist. Try first, without looking.</li>
+    <li><b>Stuck for 5 minutes?</b> Look at the guide's tables (not the solution). Still stuck? Open <code>SOLUTION.md</code>.</li>
+    <li><b>Redo it.</b> Run <code>./setup.sh</code> again and solve the lab from memory. The second clean run is what counts.</li>
+    <li><b>Tick it</b> in the Practice labs list. Your ticks are saved in this browser.</li>
+  </ol>
+
+  <h3 class="sub" id="start-tool">The Lab Practice Tool (quiz-style screen)</h3>
+  <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
+  <pre class="term"><span class="p">$</span> ~/Desktop/csp/practice/start-lab-tool.sh
+<span class="c"># opens http://127.0.0.1:8765 in your browser. Leave this terminal open; Ctrl+C stops the tool.</span></pre>
+  <ol class="steps">
+    <li>Pick a lab on the left. Its <code>work/</code> folder is built automatically the first time.</li>
+    <li>Read the task. Edit files in the panel (<kbd>Ctrl</kbd>+<kbd>S</kbd> saves) and type commands in the terminal.</li>
+    <li>Press <b>✓ Check</b>. Passed labs get a ✓ in the list.</li>
+    <li>Press <b>↺ Reset lab</b> to start that lab over, then solve it again from memory.</li>
+  </ol>
+  <div class="callout tip"><strong>Save before running git</strong>
+    <p>The terminal only sees what's saved to disk. After editing a file in the panel, press <kbd>Ctrl</kbd>+<kbd>S</kbd> <i>before</i> <code>git add</code>, exactly like the quiz's file panel. When a command changes a file (e.g. <code>git merge</code> writes conflict markers), the panel reloads it automatically.</p>
+  </div>
+
+  <h3 class="sub" id="start-labs">Running a lab from your own terminal</h3>
+  <p>You can also do every lab in a normal terminal or VS Code. Every lab is a folder with four files:</p>
+  <div class="grid2">
+    <div class="card"><h4><code>TASK.md</code></h4>The situation and the task, worded like the quiz. Read it first.</div>
+    <div class="card"><h4><code>setup.sh</code></h4>Builds a fresh <code>work/</code> folder with the scenario. Run it again any time to start over.</div>
+    <div class="card"><h4><code>check.sh</code></h4>Grades your <code>work/</code> folder with ✓ / ✗ per check, like the quiz's "What was checked".</div>
+    <div class="card"><h4><code>SOLUTION.md</code></h4>The exact commands with a why for each, and common wrong attempts. Open it only after trying.</div>
+  </div>
+  <pre class="term"><span class="p">$</span> cd ~/Desktop/csp/practice/labs/01-shell/01-files-and-folders
+<span class="p">$</span> cat TASK.md            <span class="c"># or: code TASK.md  (opens in VS Code)</span>
+<span class="p">$</span> ./setup.sh             <span class="c"># builds work/ fresh</span>
+<span class="p">$</span> cd work                <span class="c"># you solve the task in here</span>
+<span class="c">#   ... your commands ...</span>
+<span class="p">$</span> ../check.sh            <span class="c"># grade yourself (works from work/ or from the lab folder)</span>
+<span class="p">$</span> cd .. &amp;&amp; ./setup.sh    <span class="c"># start over and do it again from memory</span></pre>
+
+  <div class="callout trap"><strong>Re-run setup from the lab folder, not from inside work/</strong>
+    <p><code>setup.sh</code> deletes and rebuilds <code>work/</code>. If your terminal is inside <code>work/</code> when that happens, it's left in a deleted folder and commands act strangely. Always do <code>cd ..</code> first, then <code>./setup.sh</code>, then <code>cd work</code> again.</p>
+  </div>
+
+  <div class="callout tip"><strong>Docker labs leave their container running</strong>
+    <p>After a Docker lab passes, its container keeps holding its port (8080, 8081…). Before starting the next Docker lab, go back to the finished lab and run <code>./setup.sh</code> to clear it, or run <code>docker rm -f &lt;name&gt;</code>. Docker must be running for Topic 4 and Topic 6.</p>
+  </div>
+
+  <h3 class="sub" id="start-once">One-time setup (do this first)</h3>
+  <pre class="term"><span class="c"># 1. Make plain "git pull" merge when branches have diverged (the quiz assumes it does).</span>
+<span class="c">#    Without this, git 2.43 stops with "Need to specify how to reconcile divergent branches".</span>
+<span class="p">$</span> git config --global pull.rebase false
+
+<span class="c"># 2. Optional: use nano instead of vim when git opens an editor</span>
+<span class="p">$</span> git config --global core.editor nano
+
+<span class="c"># 3. Topic 6 in your own terminal only (the Lab Practice Tool does this for you). Once per terminal:</span>
+<span class="p">$</span> export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"
+<span class="c">#    ...or permanently:</span>
+<span class="p">$</span> echo 'export PATH="$HOME/Desktop/csp/practice/labs/bin:$PATH"' &gt;&gt; ~/.bashrc</pre>
+  <div class="callout why"><strong>Why hashes don't match the quiz</strong>
+    <p>A commit's hash depends on its time and author, so every <code>setup.sh</code> run produces new hashes. Read them from <code>git log --oneline</code> or <code>git reflog</code>. Never copy them from the task text.</p>
+  </div>
+
+  <h3 class="sub" id="start-survival">Terminal survival kit</h3>
+  <table class="cmd"><thead><tr><th>Key / command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><kbd>Tab</kbd></td><td>Autocompletes file names and commands. Press it constantly: it saves typing and prevents typos in paths.</td></tr>
+    <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Brings back earlier commands so you can fix and rerun them.</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>Stops whatever is running and gives you the prompt back.</td></tr>
+    <tr><td><kbd>q</kbd></td><td>Quits a pager. <code>git log</code>, <code>git diff</code> and <code>man</code> open one; you'll see a <code>:</code> or <code>(END)</code> at the bottom.</td></tr>
+    <tr><td><code>clear</code> or <kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Clears the screen.</td></tr>
+    <tr><td><code>pwd</code></td><td>Prints where you are. Check this whenever a path "doesn't exist".</td></tr>
+    <tr><td><code>cmd --help</code></td><td>Shows a command's options. The quiz allows this, so use it.</td></tr>
+    <tr><td><code>code file</code></td><td>Opens a file in VS Code. This stands in for the quiz's file panel.</td></tr>
+  </tbody></table>
+
+  <h3 class="sub" id="start-editors">Stuck inside an editor? (the merge-commit trap)</h3>
+  <p>Commands like <code>git commit</code> (with no <code>-m</code>) or <code>git merge</code> can open a text editor <i>inside</i> the terminal, so you can type a message. If you don't know how to leave it, you're stuck. Learn both editors' exit keys:</p>
+  <div class="grid2">
+    <div class="card"><h4>vim <span style="color:var(--muted);font-weight:400">(screen with <code>~</code> lines)</span></h4>
+      Save and quit: press <kbd>Esc</kbd>, type <code>:wq</code>, press <kbd>Enter</kbd>.<br>
+      Quit without saving: <kbd>Esc</kbd> <code>:q!</code> <kbd>Enter</kbd>.</div>
+    <div class="card"><h4>nano <span style="color:var(--muted);font-weight:400">(shortcuts listed at the bottom)</span></h4>
+      Save: <kbd>Ctrl</kbd>+<kbd>O</kbd> then <kbd>Enter</kbd>.<br>
+      Exit: <kbd>Ctrl</kbd>+<kbd>X</kbd>.</div>
+  </div>
+  <div class="callout tip"><strong>Avoid the editor completely</strong>
+    <p>Give the message on the command line: <code>git commit -m "message"</code>, or for a merge <code>git commit --no-edit</code> / <code>git merge branch --no-edit</code>.</p>
+  </div>
+
+  <h3 class="sub" id="start-plan">Your 2-day plan</h3>
+  <div class="grid2">
+    <div class="card"><h4>Day 1</h4>
+      <b>Topic 1 Shell</b> (all labs) → <b>Topic 2 Git basics</b> → <b>Topic 3 Git remotes &amp; recovery</b>.<br>
+      Evening: redo every <span class="lvl quiz">Quiz-style</span> lab from memory.</div>
+    <div class="card"><h4>Day 2</h4>
+      <b>Topic 4 Docker</b> → <b>Topic 5 Testing</b> → <b>Topic 6 Migrations</b>.<br>
+      Evening: do every <span class="lvl twist">Twist</span>, then read the <b>Quiz-day traps</b> page.</div>
+  </div>
+  <div class="callout why"><strong>Why the Twists matter</strong>
+    <p>Your professor won't repeat the same questions. The twists use the same commands in combinations you haven't seen. If you can solve those, you can handle a new quiz question.</p>
+  </div>
+</section>

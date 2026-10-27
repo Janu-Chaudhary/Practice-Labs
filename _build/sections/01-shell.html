@@ -1,0 +1,299 @@
+<section class="topic" id="shell" data-title="Shell basics">
+  <header class="topic-head">
+    <span class="tag">Topic 1</span>
+    <h2>Shell basics: files, grep, pipes and redirects</h2>
+    <p class="lede">Move around, create/move/copy/delete files, and filter log files into report files with grep, | , &gt; and &gt;&gt; without guessing.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>You are always standing <b>in one folder</b> (<code>pwd</code>). Every path you type is either relative to that folder or starts from <code>/</code>.
+    Commands are small tools that read <b>lines of text</b> and write <b>lines of text</b> to the screen.
+    <code>|</code> plugs one tool's output into the next tool's input. <code>&gt;</code> and <code>&gt;&gt;</code> send the final output into a file instead of the screen.
+    The shell sets up all the plumbing (opens files, expands <code>*</code>) <b>before</b> any command runs, which explains most of the surprises below.</p>
+  </div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-where">Where am I? Moving around</h3>
+  <p>The quiz terminal starts in the task's folder. Before anything else, find out where you are and what is there.
+  A path without a leading <code>/</code> is <b>relative</b>: it starts from the current folder.</p>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does / why</th></tr></thead><tbody>
+    <tr><td><code>pwd</code></td><td>print working directory: the folder you are standing in</td></tr>
+    <tr><td><code>ls</code> / <code>ls -la</code></td><td>list files. <code>-l</code> long format (size, date, <code>d</code> = folder), <code>-a</code> also hidden files (names starting with <code>.</code>)</td></tr>
+    <tr><td><code>ls -R logs</code></td><td>list a folder and everything below it: great for checking your final state</td></tr>
+    <tr><td><code>cd logs</code></td><td>go into <code>logs</code></td></tr>
+    <tr><td><code>cd ..</code></td><td>go up one folder. <code>..</code> = parent, <code>.</code> = this folder</td></tr>
+    <tr><td><code>cd ~</code> or <code>cd</code></td><td>go to your home folder</td></tr>
+    <tr><td><code>cd -</code></td><td>go back to the folder you were in before</td></tr>
+    <tr><td><code>cmd --help</code></td><td>short manual for a command (the quiz allows this). Pipe it: <code>grep --help | less</code></td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> pwd
+/home/student/task
+<span class="p">$</span> ls -la
+drwxr-xr-x 2 student student 4096 Sep 28 09:00 logs
+<span class="c"># the leading d means "directory" (folder)</span>
+<span class="p">$</span> cd logs &amp;&amp; pwd
+/home/student/task/logs
+<span class="p">$</span> cd ..</pre>
+  <div class="callout tip"><strong>Keyboard tips that save marks</strong><p>
+    <b>Tab</b> completes file names: type <code>logs/acc</code> + Tab. If it doesn't complete, the file isn't there (typo or wrong folder).
+    <b>Up-arrow</b> brings back your last command, so you can fix it or add <code>| ...</code> instead of retyping.
+    <b>Ctrl+C</b> stops a command that hangs (for example grep waiting for input because you forgot the file name).
+    <b>q</b> quits <code>less</code> and <code>--help | less</code> pages.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-read">Looking inside files</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does / why</th></tr></thead><tbody>
+    <tr><td><code>cat f</code></td><td>print the whole file. <code>cat a b</code> prints a then b (con<b>cat</b>enate)</td></tr>
+    <tr><td><code>less f</code></td><td>scroll a long file (arrows, Space, <code>/word</code> to search, <code>q</code> to quit)</td></tr>
+    <tr><td><code>head -n 3 f</code></td><td>first 3 lines (default 10)</td></tr>
+    <tr><td><code>tail -n 3 f</code></td><td>last 3 lines: newest entries of a log</td></tr>
+    <tr><td><code>wc -l f</code></td><td>count lines. Prints <code>8 f</code> (number <b>and</b> name)</td></tr>
+    <tr><td><code>wc -l &lt; f</code></td><td>prints just <code>8</code>: with <code>&lt;</code> the shell feeds the data in, so wc never sees the name</td></tr>
+  </tbody></table>
+  <div class="callout tip"><strong>Tip</strong><p>Always <code>cat</code> the input files first. Most traps (a <code>503ms</code> time, a DEBUG line that mentions ERROR, a <code>user=71</code>) are visible in two seconds.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-files">Create, copy, move, delete</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does / why</th></tr></thead><tbody>
+    <tr><td><code>mkdir reports</code></td><td>make a folder. Fails if the parent folder is missing</td></tr>
+    <tr><td><code>mkdir -p logs/archive/2026-10</code></td><td><code>-p</code> = make every missing parent too, and no error if it already exists</td></tr>
+    <tr><td><code>touch a.txt</code></td><td>create an empty file (or just update its time if it exists)</td></tr>
+    <tr><td><code>cp a.txt b.txt</code></td><td>copy. Order is always <b>SOURCE then DEST</b>. Original stays</td></tr>
+    <tr><td><code>cp -r src/ backup/</code></td><td><code>-r</code> (recursive) is needed to copy a folder</td></tr>
+    <tr><td><code>mv old.txt new.txt</code></td><td>DEST is not a folder -&gt; <b>rename</b></td></tr>
+    <tr><td><code>mv a.log logs/archive/</code></td><td>DEST is an existing folder -&gt; <b>move into it</b>, name kept</td></tr>
+    <tr><td><code>mv a.log b.log logs/archive/</code></td><td>several sources: the last argument must be a folder</td></tr>
+    <tr><td><code>rm a.txt</code> / <code>rm -r folder</code></td><td>delete. Folders need <code>-r</code>. There is <b>no recycle bin</b></td></tr>
+    <tr><td><code>ls incoming/*2026-10-24*</code></td><td><code>*</code> = any text. The shell swaps it for matching names before the command runs</td></tr>
+  </tbody></table>
+  <div class="anatomy">
+    <code><span>mv</span> <span>logs/access.log.1</span> <span>logs/archive/</span></code>
+    <ol><li>move (or rename)</li><li>source: the file to move</li><li>destination; the trailing <code>/</code> says "this must be a folder", so a typo gives an error instead of a silent rename</li></ol>
+  </div>
+  <div class="callout trap"><strong>Trap: mv into a folder that doesn't exist</strong><p>
+    <code>mv logs/access.log.1 logs/archive</code> when <code>logs/archive</code> is missing does <b>not</b> error. It renames the log to a <b>file</b> called <code>archive</code>.
+    Always <code>mkdir</code> first, and write the destination with a trailing <code>/</code>: then you get <code>Not a directory</code> instead of a silent mistake.</p></div>
+  <div class="callout trap"><strong>Trap: rm -r is forever</strong><p>Read the line before Enter. <code>rm -r tmp /</code> (stray space) tries to delete the whole disk. Use <code>ls</code> with the same pattern first to see what would be hit.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-redirect">echo, quotes, &gt;, &gt;&gt;, &lt; and |</h3>
+  <p>Every command writes to the screen ("standard output"). The shell can redirect that stream:</p>
+  <table class="cmd"><thead><tr><th>Symbol</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td><code>cmd &gt; f</code></td><td>write output to file f. <b>Creates</b> f, or <b>wipes</b> it first if it exists</td></tr>
+    <tr><td><code>cmd &gt;&gt; f</code></td><td>add output to the <b>end</b> of f (creates it if missing). Keeps what was there</td></tr>
+    <tr><td><code>cmd &lt; f</code></td><td>feed file f as the input</td></tr>
+    <tr><td><code>cmd1 | cmd2</code></td><td>pipe: cmd1's output becomes cmd2's input. No file in between</td></tr>
+    <tr><td><code>echo "text" &gt; f</code></td><td>write one line. <code>echo</code> just prints its arguments + a newline</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> echo "first line" &gt; hello.txt
+<span class="p">$</span> echo "second line" &gt;&gt; hello.txt
+<span class="p">$</span> cat hello.txt
+first line
+second line
+<span class="p">$</span> echo "oops" &gt; hello.txt     <span class="c"># &gt; starts from empty again</span>
+<span class="p">$</span> cat hello.txt
+oops</pre>
+  <p><b>Quoting.</b> The shell splits your line on spaces and treats <code>| &gt; &lt; * $</code> as special. Put patterns in <b>single quotes</b>
+  (<code>'method=(GET|DELETE)'</code>) so the shell passes them to grep untouched. Double quotes also protect spaces and <code>|</code> but still expand <code>$var</code>.</p>
+  <div class="callout why"><strong>Why "redirect into a missing folder" fails</strong><p>
+    <code>&gt;</code> can create a <b>file</b>, never a <b>folder</b>. The shell opens <code>reports/orders-500.txt</code> before grep starts; if <code>reports</code> doesn't exist you get
+    <code>bash: reports/orders-500.txt: No such file or directory</code> and grep never runs. Fix: <code>mkdir reports</code> (or <code>mkdir -p</code>) first.</p></div>
+  <div class="callout trap"><strong>Trap: never redirect into the file you are reading</strong><p>
+    <code>sort visitors.txt &gt; visitors.txt</code> or <code>grep -v x app.log &gt; app.log</code> leaves the file <b>empty</b>: the shell wipes the <code>&gt;</code> target before the command reads it.
+    Write to a new file. (In a "don't change the log" task this loses all marks.)</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-grep">grep: keep only matching lines</h3>
+  <p><code>grep PATTERN FILE...</code> prints every line of the file(s) that contains PATTERN. It never changes the file.
+  With no file name it reads its input (the pipe, or the keyboard, which looks like a hang: Ctrl+C).</p>
+  <div class="anatomy">
+    <code><span>grep</span> <span>-h</span> <span>'status=500'</span> <span>logs/access.log.1 logs/access.log</span> <span>&gt; reports/x.txt</span></code>
+    <ol><li>the filter command</li><li>option: hide file names</li><li>the pattern, quoted, as exact as possible</li><li>files, read in the order you list them</li><li>save the result instead of printing it</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Option</th><th>Effect / when you need it</th></tr></thead><tbody>
+    <tr><td><code>-i</code></td><td>ignore case: <code>ERROR</code>, <code>error</code>, <code>Error</code> all match</td></tr>
+    <tr><td><code>-v</code></td><td>invert: keep lines that do <b>not</b> match ("everything except health checks")</td></tr>
+    <tr><td><code>-c</code></td><td>print only the <b>count</b> of matching lines</td></tr>
+    <tr><td><code>-n</code></td><td>put the line number in front: <code>3:2026-...</code></td></tr>
+    <tr><td><code>-h</code></td><td>no <code>filename:</code> prefix when searching several files</td></tr>
+    <tr><td><code>-H</code></td><td>the opposite: always show the file name</td></tr>
+    <tr><td><code>-w</code></td><td>whole word only: <code>-w 'user=7'</code> skips <code>user=71</code></td></tr>
+    <tr><td><code>-E</code></td><td>extended regex: <code>|</code> (or), <code>( )</code>, <code>{4,}</code>, <code>+</code> work</td></tr>
+    <tr><td><code>-F</code></td><td>fixed string: dots and stars are normal characters (<code>grep -F '1.2.3'</code>)</td></tr>
+    <tr><td><code>-r</code></td><td>search every file in a folder and below: <code>grep -r 'TODO' src/</code></td></tr>
+    <tr><td><code>-o</code></td><td>print only the matched part, not the whole line</td></tr>
+    <tr><td><code>-l</code></td><td>print only the names of files that match</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> grep 'status=500' logs/access.log.1 logs/access.log
+logs/access.log.1:2026-09-27T10:02:17 service=orders method=POST status=500 3021ms
+logs/access.log.1:2026-09-27T10:05:40 service=users method=GET status=500 88ms
+logs/access.log:2026-09-28T09:03:29 service=orders method=POST status=500 2987ms
+logs/access.log:2026-09-28T09:06:48 service=orders method=GET status=500 3104ms
+<span class="c"># two or more files -&gt; grep adds "file:" in front. -h removes it.</span>
+<span class="p">$</span> grep -c 'status=500' logs/access.log
+2</pre>
+  <div class="callout trap"><strong>Trap: the pattern is a substring</strong><p>
+    <code>grep 500</code> also matches <code>3500ms</code> and <code>user=500</code>. <code>grep error</code> misses <code>ERROR</code>. Match the whole field: <code>'status=500'</code>, <code>'level=ERROR'</code>, <code>-i</code> when case varies, <code>-w</code> for whole words.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-combine">AND, OR and regex basics</h3>
+  <p><b>AND</b> = two greps in a pipe. The first reads the file; the second has <b>no file</b>, so it filters what comes down the pipe.
+  <b>OR</b> = one <code>grep -E 'a|b'</code>.</p>
+  <pre class="term"><span class="p">$</span> grep 'service=orders' logs/access.log | grep 'status=500'
+2026-09-28T09:03:29 service=orders method=POST status=500 2987ms
+2026-09-28T09:06:48 service=orders method=GET status=500 3104ms
+<span class="p">$</span> grep -E 'level=(WARN|ERROR)' logs/app.log      <span class="c"># WARN or ERROR</span></pre>
+  <div class="callout trap"><strong>Trap: the Quiz 1 hint <code>grep P1 file1 | grep P2 file2 &gt; file3</code></strong><p>
+    If the <b>second</b> grep is given a file, it reads that file and <b>ignores the pipe completely</b>. So
+    <code>grep service=orders access.log.1 | grep status=500 access.log</code> just prints today's status=500 lines (including other services) and yesterday is lost.
+    In an AND chain only the <b>first</b> grep gets file names. To combine two files, either list both in the first grep (<code>grep -h P1 f1 f2 | grep P2</code>)
+    or run one chain per file with <code>&gt;</code> then <code>&gt;&gt;</code>.</p></div>
+  <table class="cmd"><thead><tr><th>Regex piece</th><th>Means</th><th>Example</th></tr></thead><tbody>
+    <tr><td><code>.</code></td><td>any one character</td><td><code>'status=5..'</code> = any 5xx</td></tr>
+    <tr><td><code>.*</code></td><td>anything (zero or more chars)</td><td><code>'service=orders.*status=500'</code> = AND in one grep, if the order is fixed</td></tr>
+    <tr><td><code>^</code></td><td>start of line</td><td><code>'^2026-09-27'</code> = lines from that day</td></tr>
+    <tr><td><code>$</code></td><td>end of line</td><td><code>'ms$'</code></td></tr>
+    <tr><td><code>[0-9]</code></td><td>one digit</td><td><code>'status=5[0-9][0-9]'</code></td></tr>
+    <tr><td><code>{4,}</code> (needs -E)</td><td>4 or more of the previous thing</td><td><code>-E '[0-9]{4,}ms'</code> = 1000ms or more</td></tr>
+    <tr><td><code>a|b</code> (needs -E)</td><td>a or b</td><td><code>-E 'GET|DELETE'</code></td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap: forgetting -E or the quotes</strong><p>
+    <code>grep 'GET|DELETE'</code> (no <code>-E</code>) finds nothing: in basic grep <code>|</code> is a plain character.
+    <code>grep -E GET|DELETE f</code> (no quotes): the shell makes a pipe, prints <code>DELETE: command not found</code>, and grep waits for keyboard input. Ctrl+C.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-sort">sort, uniq, cut, find</h3>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does / why</th></tr></thead><tbody>
+    <tr><td><code>sort f</code></td><td>sort lines A-Z. Timestamps like <code>2026-09-27T10:02</code> sort into time order</td></tr>
+    <tr><td><code>sort -n</code> / <code>sort -rn</code></td><td>sort as numbers (so 10 &gt; 9) / biggest first</td></tr>
+    <tr><td><code>sort -u</code></td><td>sort and drop duplicates</td></tr>
+    <tr><td><code>uniq</code></td><td>drop repeated lines, but only <b>neighbours</b>, so <code>sort</code> first</td></tr>
+    <tr><td><code>uniq -c</code></td><td>count each group: <code>      3 service=orders</code></td></tr>
+    <tr><td><code>cut -d' ' -f2</code></td><td>split each line on spaces, keep field 2 (default delimiter is TAB)</td></tr>
+    <tr><td><code>find . -name '*.log'</code></td><td>find files by name in this folder and below (quote the pattern)</td></tr>
+  </tbody></table>
+  <pre class="term"><span class="p">$</span> grep 'status=5' logs/access.log | cut -d' ' -f2 | sort | uniq -c
+      3 service=orders
+      2 service=payments
+      1 service=users
+<span class="c"># build it one | at a time: up-arrow, add the next stage, Enter, look</span></pre>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-q18">Quiz 1 Q18 step by step (order matters)</h3>
+  <p>Task: put every <code>service=orders</code> + <code>status=500</code> line from yesterday's <code>logs/access.log.1</code> then today's <code>logs/access.log</code> into
+  <code>reports/orders-500.txt</code>, then move <code>access.log.1</code> into a new <code>logs/archive</code>.</p>
+  <pre class="term"><span class="p">$</span> mkdir reports                                  <span class="c"># 1. &gt; can't create folders</span>
+<span class="p">$</span> grep 'service=orders' logs/access.log.1 | grep 'status=500' &gt; reports/orders-500.txt    <span class="c"># 2. yesterday, &gt;</span>
+<span class="p">$</span> grep 'service=orders' logs/access.log | grep 'status=500' &gt;&gt; reports/orders-500.txt    <span class="c"># 3. today, &gt;&gt;</span>
+<span class="p">$</span> cat reports/orders-500.txt
+2026-09-27T10:02:17 service=orders method=POST status=500 3021ms
+2026-09-28T09:03:29 service=orders method=POST status=500 2987ms
+2026-09-28T09:06:48 service=orders method=GET status=500 3104ms
+<span class="p">$</span> mkdir logs/archive                             <span class="c"># 4. mv won't create it</span>
+<span class="p">$</span> mv logs/access.log.1 logs/archive/              <span class="c"># 5. grep FIRST, move LAST</span>
+<span class="p">$</span> ls -R logs</pre>
+  <div class="callout why"><strong>Why this order</strong><p>Grep before mv: once the log is moved, <code>logs/access.log.1</code> no longer exists and grep says <code>No such file or directory</code>.
+  <code>&gt;</code> for the first write (start clean), <code>&gt;&gt;</code> for the second (keep yesterday on top). One-liner alternative:
+  <code>grep -h 'service=orders' logs/access.log.1 logs/access.log | grep 'status=500' &gt; reports/orders-500.txt</code>.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-errors">Common errors and what they mean</h3>
+  <div class="err"><pre>bash: reports/orders-500.txt: No such file or directory</pre><p><b>Means:</b> a folder in the path doesn't exist (here <code>reports</code>). Same for <code>grep: logs/x.log: No such file or directory</code>: wrong name, wrong folder, or you already moved it.</p><p><b>Fix:</b> <code>ls</code>, <code>pwd</code>, use Tab completion; <code>mkdir -p</code> the folder.</p></div>
+  <div class="err"><pre>rm: cannot remove 'tmp': Is a directory
+grep: logs: Is a directory</pre><p><b>Means:</b> you gave a folder to a command that wants a file.</p><p><b>Fix:</b> <code>rm -r tmp</code>; for grep name the files (<code>logs/*.log</code>) or use <code>grep -r</code>.</p></div>
+  <div class="err"><pre>mv: cannot move 'a.log' to 'logs/archive/': Not a directory</pre><p><b>Means:</b> the destination folder doesn't exist (the trailing <code>/</code> protected you from a silent rename).</p><p><b>Fix:</b> <code>mkdir -p logs/archive</code> then repeat (up-arrow).</p></div>
+  <div class="err"><pre>mkdir: cannot create directory 'project/src/utils': No such file or directory</pre><p><b>Means:</b> parent folders are missing.</p><p><b>Fix:</b> <code>mkdir -p project/src/utils</code>.</p></div>
+  <div class="err"><pre>bash: ./run.sh: Permission denied</pre><p><b>Means:</b> the file isn't executable, or you can't write to that place.</p><p><b>Fix:</b> <code>bash run.sh</code> or <code>chmod +x run.sh</code>; write inside your own folders.</p></div>
+  <div class="err"><pre>bash: DELETE: command not found
+bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code>|</code> split your pattern into a second "command".</p><p><b>Fix:</b> check spelling; put patterns in single quotes.</p></div>
+  <div class="err"><pre>(nothing happens, no prompt)</pre><p><b>Means:</b> the command is waiting for input: usually grep/cat/sort with no file name and no pipe.</p><p><b>Fix:</b> Ctrl+C, then add the file name.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="shell-scenarios">Worked scenarios</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Last 2 lines of a log into a file</summary>
+    <div class="body"><p><code>logs/app.log</code> exists. Create <code>tail.txt</code> with only its last 2 lines.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> tail -n 2 logs/app.log &gt; tail.txt</pre><p><code>tail -n N</code> = last N lines; <code>&gt;</code> saves them.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Count today's failed requests</summary>
+    <div class="body"><p>Write only the number of <code>status=500</code> lines in <code>logs/access.log</code> into <code>count.txt</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> grep -c 'status=500' logs/access.log &gt; count.txt
+<span class="c"># also fine: grep 'status=500' logs/access.log | wc -l &gt; count.txt</span></pre><p>Don't use <code>wc -l file</code>: it adds the file name.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Everything except health checks, from two logs, then archive</summary>
+    <div class="body"><p><code>logs/access.log.1</code> (yesterday) and <code>logs/access.log</code> (today). Create <code>reports/no-health.txt</code> with every line that is <b>not</b> <code>service=health</code>, yesterday first. Then move <code>access.log.1</code> into a new <code>logs/old/</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> mkdir -p reports logs/old
+<span class="p">$</span> grep -hv 'service=health' logs/access.log.1 logs/access.log &gt; reports/no-health.txt
+<span class="p">$</span> mv logs/access.log.1 logs/old/</pre><p><code>-v</code> inverts, <code>-h</code> drops file names (options can be joined: <code>-hv</code>). Files in the order listed = yesterday first. Grep before mv.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> POST or PUT failures of one service</summary>
+    <div class="body"><p>From <code>logs/access.log</code>, save every <code>service=users</code> request whose method is POST <b>or</b> PUT and whose status is any 5xx into <code>reports/users-writes-5xx.txt</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> mkdir -p reports
+<span class="p">$</span> grep 'service=users' logs/access.log | grep -E 'method=(POST|PUT)' | grep 'status=5' &gt; reports/users-writes-5xx.txt</pre><p>AND = more pipes; OR = <code>-E 'a|b'</code>; <code>status=5</code> matches 500-599 but not a <code>500ms</code> time.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Back up a folder and add a note</summary>
+    <div class="body"><p>Copy the whole <code>config</code> folder to <code>config-backup</code>, then add the line <code>backup done</code> to the end of <code>CHANGELOG.txt</code> without losing its lines.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cp -r config config-backup
+<span class="p">$</span> echo "backup done" &gt;&gt; CHANGELOG.txt</pre><p>Folders need <code>cp -r</code> (else <code>-r not specified; omitting directory</code>). <code>&gt;&gt;</code> appends, <code>&gt;</code> would wipe the changelog.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Which users hit the API most?</summary>
+    <div class="body"><p><code>logs/access.log</code> lines contain <code>user=NAME</code> somewhere. Create <code>reports/top-users.txt</code>: the 3 users with the most requests, biggest first, as <code>COUNT user=NAME</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> grep -o 'user=[a-z0-9]*' logs/access.log | sort | uniq -c | sort -rn | head -n 3 &gt; reports/top-users.txt</pre><p><code>-o</code> prints just the matching part (works even if the field position varies, unlike <code>cut</code>). sort -&gt; uniq -c counts -&gt; sort -rn biggest first -&gt; head keeps 3.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Clean up temp files everywhere</summary>
+    <div class="body"><p>A <code>build</code> folder has <code>.tmp</code> files hidden in many sub-folders. List their paths, sorted, into <code>tmp-list.txt</code>, then delete them (only them).</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> find build -name '*.tmp' | sort &gt; tmp-list.txt
+<span class="p">$</span> cat tmp-list.txt                 <span class="c"># look before deleting</span>
+<span class="p">$</span> find build -name '*.tmp' -delete</pre><p>Quote <code>'*.tmp'</code> so <code>find</code> (not the shell) does the matching in every sub-folder. <code>rm build/*.tmp</code> would only reach the top level.</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="shell-01"> <code>labs/01-shell/01-files-and-folders</code>
+      <span>mkdir -p, touch, rename vs move with mv, cp, rm -r</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-02"> <code>labs/01-shell/02-grep-basics</code>
+      <span>grep -i, -c, -v, -n into files with &gt;</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-03"> <code>labs/01-shell/03-redirects-and-pipes</code>
+      <span>echo &gt; vs &gt;&gt;, head, wc -l &lt; file, sort | uniq</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-04"> <code>labs/01-shell/04-grep-combine</code>
+      <span>AND with a pipe, OR with -E, -h across two files, -w</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-05"> <code>labs/01-shell/05-quiz-orders-500</code>
+      <span>Quiz 1 Q18 exactly: orders+500 report from two logs, then archive</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-06"> <code>labs/01-shell/06-quiz-payments-three-logs</code>
+      <span>Three rotated logs oldest first, 503ms trap, mkdir -p nested archive</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-07"> <code>labs/01-shell/07-quiz-report-and-backup</code>
+      <span>WARN|ERROR report, error count, cp into new folder, append a note</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-08"> <code>labs/01-shell/08-twist-failures-per-service</code>
+      <span>Count 5xx per service with grep | cut | sort | uniq -c, pick the top</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-09"> <code>labs/01-shell/09-twist-dated-folders</code>
+      <span>Move logs into dated folders with *, collect 1000ms+ requests in time order</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>pwd</code> / <code>ls -la</code> / <code>ls -R dir</code> where am I, what's here, final-state check</li>
+    <li><code>cd dir</code> <code>cd ..</code> <code>cd -</code> <code>cd ~</code> move around</li>
+    <li><code>cat f</code> <code>head -n 3 f</code> <code>tail -n 3 f</code> <code>less f</code> (q quits) look inside</li>
+    <li><code>mkdir -p a/b/c</code> make folders incl. parents</li>
+    <li><code>cp src dest</code> / <code>cp -r dir dir2</code> copy (source first)</li>
+    <li><code>mv old new</code> rename; <code>mv f dir/</code> move into existing folder</li>
+    <li><code>rm f</code> / <code>rm -r dir</code> delete for good</li>
+    <li><code>cmd &gt; f</code> overwrite/create; <code>cmd &gt;&gt; f</code> append; neither creates folders</li>
+    <li><code>a | b</code> a's output into b</li>
+    <li><code>grep 'pat' f</code>; <code>-i</code> case, <code>-v</code> invert, <code>-c</code> count, <code>-n</code> line no., <code>-w</code> word</li>
+    <li><code>grep -h 'pat' f1 f2</code> several files, in that order, no name prefix</li>
+    <li><code>grep 'A' f | grep 'B'</code> AND (second grep gets NO file)</li>
+    <li><code>grep -E 'A|B' f</code> OR (quote it)</li>
+    <li><code>^</code> start, <code>$</code> end, <code>.</code> any char, <code>.*</code> anything, <code>[0-9]{4,}</code> 4+ digits (-E)</li>
+    <li><code>sort | uniq -c | sort -rn | head -n 1</code> count and rank</li>
+    <li><code>cut -d' ' -f2</code> field 2 of space-separated lines</li>
+    <li><code>wc -l &lt; f</code> just the line count</li>
+    <li><code>find . -name '*.log'</code> find files by name</li>
+    <li>Order: mkdir -&gt; grep (&gt; then &gt;&gt;) -&gt; cat to check -&gt; mv last</li>
+  </ul></div>
+</section>
