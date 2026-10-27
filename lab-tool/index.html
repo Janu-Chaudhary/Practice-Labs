@@ -15,14 +15,19 @@
   --drill:#0e7490;--quiz:#a16207;--twist:#9d174d}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1114;--panel:#171a1f;--ink:#e7e9ec;--muted:#9aa3ad;--line:#2a2f37;--accent:#6ea0ff;--accent-soft:#1c2840;
   --ok:#4ade80;--ok-bg:#13241a;--bad:#f87171;--bad-bg:#2a1515;--warn:#facc15;--code:#22262d;--term:#0b0d10;--drill:#67e8f9;--quiz:#facc15;--twist:#f9a8d4}}
+/* panel sizes; the dividers between panels change these (saved per browser) */
+:root{--side-w:250px;--mid-w:44%;--task-h:42%;--tree-w:190px;--res-h:40%}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--ink);font:14px/1.55 Inter,system-ui,sans-serif;display:grid;grid-template-rows:52px 1fr;overflow:hidden}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 Inter,system-ui,sans-serif;display:grid;grid-template-rows:52px 1fr;grid-template-columns:minmax(0,1fr);overflow:hidden}
 code,pre,textarea{font-family:"JetBrains Mono",ui-monospace,monospace}
 button{font:inherit;cursor:pointer}
 
 header{display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--panel);border-bottom:1px solid var(--line)}
-header .brand{font-weight:700;width:236px;flex:none}
+header .brand{font-weight:700;width:calc(var(--side-w) - 58px);min-width:max-content;flex:none}
+.noside-mode header .brand{width:auto}
+.btn.icon{padding:5px 9px;line-height:1}
 header .title{font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header .title small{color:var(--muted);font-weight:400;margin-left:8px;font-family:"JetBrains Mono",monospace;font-size:12px}
 .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:6px 12px;border-radius:8px;font-weight:500}
@@ -32,8 +37,20 @@ header .title small{color:var(--muted);font-weight:400;margin-left:8px;font-fami
 .btn.check{background:var(--ok);border-color:var(--ok);color:#fff}
 .btn:disabled{opacity:.5;cursor:default}
 
-.app{display:grid;grid-template-columns:250px minmax(0,1fr) minmax(0,1.15fr);min-height:0}
-aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:10px 8px 30px}
+.app{display:grid;grid-template-columns:var(--side-w) 1px minmax(0,var(--mid-w)) 1px minmax(0,1fr);min-height:0}
+.noside-mode .app{grid-template-columns:minmax(0,var(--mid-w)) 1px minmax(0,1fr)}  /* hidden items leave the grid */
+.noside-mode aside,.noside-mode .gutter[data-g=side]{display:none}
+aside{background:var(--panel);overflow-y:auto;padding:10px 8px 30px}
+
+/* dividers: a 1px line with a wider invisible grab area */
+.gutter{background:var(--line);position:relative;z-index:5;touch-action:none;flex:none}
+.gutter::before{content:"";position:absolute;inset:0 -4px;cursor:col-resize}
+.gutter.row{height:1px}
+.gutter.row::before{inset:-4px 0;cursor:row-resize}
+.gutter:hover,.gutter.active,.gutter:focus-visible{background:var(--accent);outline:0}
+body.dragging{user-select:none;cursor:col-resize}
+body.dragging.drag-row{cursor:row-resize}
+body.dragging #term,body.dragging #editor{pointer-events:none}
 .topic>button{display:flex;width:100%;align-items:center;gap:6px;background:none;border:0;color:var(--ink);font-weight:600;padding:7px 8px;border-radius:8px;text-align:left}
 .topic>button:hover{background:var(--accent-soft)}
 .topic>button .cnt{margin-left:auto;font-size:11.5px;color:var(--muted);font-weight:500}
@@ -42,6 +59,9 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 .topic ul{list-style:none;margin:0 0 6px;padding:0;display:none}
 .topic.open ul{display:block}
 .topic li a{display:flex;gap:8px;align-items:center;padding:5px 8px 5px 22px;border-radius:7px;color:var(--ink);text-decoration:none;font-size:13px;cursor:pointer}
+.topic li a .num{color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:11.5px;flex:none}
+.topic li a .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topic li a.active .num{color:inherit}
 .topic li a:hover{background:var(--bg)}
 .topic li a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -50,12 +70,12 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 .legend{font-size:11.5px;color:var(--muted);padding:12px 8px 0;display:flex;gap:10px;flex-wrap:wrap}
 .legend span{display:flex;align-items:center;gap:5px}
 
-.col{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line)}
+.col{display:flex;flex-direction:column;min-height:0;min-width:0}
 .pane{background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .pane-h{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);flex:none}
 .pane-h .sp{flex:1}
 .pane-h .btn{text-transform:none;letter-spacing:0;font-size:12px;padding:3px 9px}
-#taskPane{flex:0 0 42%;border-bottom:1px solid var(--line)}
+#taskPane{flex:0 0 var(--task-h)}
 #task{overflow-y:auto;padding:4px 18px 18px;font-size:14px}
 #task h1{font-size:19px;margin:12px 0 6px}#task h2{font-size:15px;margin:16px 0 4px}#task h3{font-size:14px;margin:12px 0 4px}
 #task code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.88em}
@@ -64,9 +84,9 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 #task ul,#task ol{padding-left:20px}
 #task table{border-collapse:collapse}#task td,#task th{border:1px solid var(--line);padding:4px 8px}
 #filesPane{flex:1}
-.files-body{display:grid;grid-template-columns:190px minmax(0,1fr);flex:1;min-height:0}
-#tree{border-right:1px solid var(--line);overflow:auto;padding:6px 0;font-size:13px}
-#tree div{padding:3px 10px;white-space:nowrap;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:12.5px}
+.files-body{display:grid;grid-template-columns:min(var(--tree-w),60%) 1px minmax(0,1fr);flex:1;min-height:0}
+#tree{overflow-y:auto;overflow-x:hidden;padding:6px 0;font-size:13px}
+#tree div{padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:12.5px}
 #tree div:hover{background:var(--bg)}
 #tree div.dir{color:var(--muted);cursor:default}
 #tree div.sel{background:var(--accent-soft);color:var(--accent)}
@@ -83,11 +103,21 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 
 #termPane{flex:1;background:var(--term)}
 #termPane .pane-h{background:var(--term);color:#8b949e;border-color:#2a2f37}
-#termPane .pane-h .hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px;color:#6e7681}
-#termPane .pane-h .btn{background:transparent;color:#c9d1d9;border-color:#333a44}
+#termPane .pane-h .hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px;color:#6e7681;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#termPane .pane-h .sp{flex:0 1 auto}
+#termPane .pane-h .hint{flex:1;text-align:right}
+#termPane .pane-h .btn{background:transparent;color:#c9d1d9;border-color:#333a44;flex:none}
+#termPane .pane-h .btn:hover{border-color:#6e7681;color:#fff}
 #term{flex:1;min-height:0;padding:6px 0 0 8px}
-#results{flex:0 0 auto;max-height:45%;display:none;flex-direction:column;border-top:1px solid var(--line)}
+#results{flex:0 0 var(--res-h);display:none;flex-direction:column;min-height:0}
 #results.show{display:flex}
+#resGutter{display:none}
+#resGutter.show{display:block}
+#resultsHead .btn{flex:none}
+#nextBtn{display:none}
+#results.passed #nextBtn{display:inline-block}
+.gate{margin:auto;text-align:center;padding:28px 20px;color:var(--muted)}
+.gate p{margin:0 0 14px}
 #resultsBody{overflow:auto;margin:0;padding:10px 14px;font-size:13px;line-height:1.6;background:var(--panel);white-space:pre-wrap}
 #results .pane-h.ok{color:var(--ok);background:var(--ok-bg)}
 #results .pane-h.bad{color:var(--bad);background:var(--bad-bg)}
@@ -104,39 +134,45 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
 .toast.show{opacity:1}
 @media (max-width:1100px){
-  body{overflow:auto;grid-template-rows:auto 1fr}
+  body{overflow:auto;grid-template-rows:auto auto}  /* stack the panels and let the page scroll */
+  .col{min-height:auto}
   header{flex-wrap:wrap;padding:8px 12px}
   header .brand{width:auto}
-  .app{grid-template-columns:1fr;grid-auto-rows:auto}
-  aside{max-height:30vh}
-  .col{border-right:0}
-  #taskPane{flex:none;max-height:none}
+  .app,.noside-mode .app{grid-template-columns:1fr;grid-auto-rows:auto}
+  .gutter{display:none!important}
+  aside{height:30vh;border-bottom:1px solid var(--line)}
+  #taskPane{flex:none;max-height:none;border-bottom:1px solid var(--line)}
   #filesPane{height:420px;flex:none}
   #termPane{height:480px;flex:none}
-  .files-body{grid-template-columns:140px minmax(0,1fr)}
+  #results{flex:none;max-height:60vh}
+  .files-body .gutter{display:block!important}
 }
 </style>
 </head>
 <body>
 <header>
+  <button class="btn icon" id="sideBtn" title="Hide / show the lab list" aria-label="Hide or show the lab list">☰</button>
   <div class="brand">⌨ Lab Practice Tool</div>
   <div class="title" id="title">Pick a lab on the left</div>
   <button class="btn" id="setupBtn" disabled title="Runs setup.sh: builds a fresh work/ folder">↺ Reset lab</button>
-  <button class="btn check" id="checkBtn" disabled title="Runs check.sh">✓ Check</button>
+  <button class="btn check" id="checkBtn" disabled title="Runs check.sh (Ctrl+Enter)">✓ Check</button>
   <button class="btn" id="solBtn" disabled>Solution</button>
 </header>
 <div class="app">
   <aside id="side"><div class="legend"><span><i class="dot drill"></i>Drill</span><span><i class="dot quiz"></i>Quiz-style</span><span><i class="dot twist"></i>Twist</span></div></aside>
+  <div class="gutter" data-g="side"></div>
 
-  <div class="col">
+  <div class="col" id="midCol">
     <div class="pane" id="taskPane">
       <div class="pane-h">Task</div>
-      <div id="task"><div class="empty">Choose a lab from the list.<br>Each one is a real scenario on your machine, graded like the quiz.</div></div>
+      <div id="task"><div class="empty">Choose a lab from the list.<br>Each one is a real scenario on your machine, graded like the quiz.<br><br>Drag the lines between panels to resize them.</div></div>
     </div>
+    <div class="gutter row" data-g="task"></div>
     <div class="pane" id="filesPane">
       <div class="pane-h">Files <span style="text-transform:none;letter-spacing:0;font-weight:400">(work/)</span><span class="sp"></span><button class="btn" id="refreshBtn">Refresh</button></div>
       <div class="files-body">
         <div id="tree"></div>
+        <div class="gutter" data-g="tree"></div>
         <div class="editor-wrap">
           <div class="editor-bar"><span class="name" id="fname">No file open</span><span class="state" id="fstate"></span><span class="sp"></span><button class="btn" id="saveBtn" disabled>Save <kbd>Ctrl+S</kbd></button></div>
           <div class="notice" id="notice"></div>
@@ -146,20 +182,24 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
     </div>
   </div>
 
-  <div class="col" style="border-right:0">
+  <div class="gutter" data-g="mid"></div>
+
+  <div class="col" id="termCol">
     <div class="pane" id="termPane">
-      <div class="pane-h">Terminal<span class="sp"></span><span class="hint">Select text, then Ctrl+C or Ctrl+Shift+C copies · Ctrl+V pastes</span><button class="btn" id="clearBtn">Clear</button></div>
+      <div class="pane-h">Terminal<span class="sp"></span><span class="hint">Select text, then Ctrl+C copies · Ctrl+V pastes · Ctrl+Enter checks</span>
+        <button class="btn" id="fontDown" title="Smaller terminal text" aria-label="Smaller terminal text">A−</button><button class="btn" id="fontUp" title="Bigger terminal text" aria-label="Bigger terminal text">A+</button><button class="btn" id="clearBtn">Clear</button></div>
       <div id="term"></div>
     </div>
+    <div class="gutter row" data-g="res" id="resGutter"></div>
     <div class="pane" id="results">
-      <div class="pane-h" id="resultsHead">What was checked<span class="sp"></span><button class="btn" id="closeRes">Close</button></div>
+      <div class="pane-h" id="resultsHead">What was checked<span class="sp"></span><button class="btn primary" id="nextBtn">Next lab →</button><button class="btn" id="closeRes">Close</button></div>
       <pre id="resultsBody"></pre>
     </div>
   </div>
 </div>
 
 <div class="modal" id="solModal"><div class="card">
-  <div class="pane-h">Solution<span class="sp"></span><button class="btn" id="closeSol">Close</button></div>
+  <div class="pane-h">Solution<span class="sp"></span><button class="btn" id="closeSol">Close <kbd>Esc</kbd></button></div>
   <div class="content" id="solContent"></div>
 </div></div>
 <div class="toast" id="toast"></div>
@@ -182,28 +222,37 @@ let topics=[],current=null;
 const doneKey=id=>'labtool-done-'+id;
 
 // ---------- sidebar ----------
+// topics the student expanded stay expanded across re-renders and reloads
+let openTopics=new Set();try{openTopics=new Set(JSON.parse(store.get('labtool-open')||'[]'));}catch(e){}
 function renderSide(){
   const side=$('#side');side.querySelectorAll('.topic').forEach(e=>e.remove());
   const legend=side.querySelector('.legend');
   topics.forEach(t=>{
     const d=document.createElement('div');d.className='topic';
     const done=t.labs.filter(l=>store.get(doneKey(l.id))==='1').length;
-    d.innerHTML=`<button><span class="arrow">▶</span><span></span><span class="cnt">${done}/${t.labs.length}</span></button><ul></ul>`;
+    d.innerHTML=`<button aria-expanded="false"><span class="arrow">▶</span><span></span><span class="cnt">${done}/${t.labs.length}</span></button><ul></ul>`;
     d.querySelector('button span:nth-child(2)').textContent=t.name;
-    d.querySelector('button').onclick=()=>d.classList.toggle('open');
+    const setOpen=o=>{d.classList.toggle('open',o);d.querySelector('button').setAttribute('aria-expanded',o);};
+    d.querySelector('button').onclick=()=>{const o=!d.classList.contains('open');setOpen(o);
+      o?openTopics.add(t.id):openTopics.delete(t.id);store.set('labtool-open',JSON.stringify([...openTopics]));};
+    if(openTopics.has(t.id))setOpen(true);
     const ul=d.querySelector('ul');
     t.labs.forEach(l=>{const li=document.createElement('li');
-      li.innerHTML=`<a><i class="dot ${l.level}"></i><span></span>${store.get(doneKey(l.id))==='1'?'<span class="done">✓</span>':''}</a>`;
-      li.querySelector('span').textContent=l.name.replace(/^\d\d-/,'').replace(/-/g,' ');
-      li.querySelector('a').title=l.title;
-      if(current===l.id){li.querySelector('a').classList.add('active');d.classList.add('open');}
-      li.querySelector('a').onclick=()=>openLab(l.id);ul.appendChild(li);});
+      li.innerHTML=`<a href="#lab=${encodeURIComponent(l.id)}"><i class="dot ${l.level}"></i><span class="num"></span><span class="nm"></span>${store.get(doneKey(l.id))==='1'?'<span class="done" aria-label="passed">✓</span>':''}</a>`;
+      const m=l.name.match(/^(\d\d)-(?:(?:quiz|twist)-)?(.*)$/)||[0,'',l.name];
+      li.querySelector('.num').textContent=m[1];li.querySelector('.nm').textContent=m[2].replace(/-/g,' ');
+      const a=li.querySelector('a');a.title=l.title;
+      if(current===l.id){a.classList.add('active');a.setAttribute('aria-current','page');setOpen(true);}
+      a.onclick=e=>{e.preventDefault();openLab(l.id);};ul.appendChild(li);});
     side.insertBefore(d,legend);
   });
+  const act=side.querySelector('a.active');if(act)act.scrollIntoView({block:'nearest'});
 }
+function nextLabId(){const all=topics.flatMap(t=>t.labs.map(l=>l.id));const i=all.indexOf(current);return i>=0&&i<all.length-1?all[i+1]:null;}
 
 // ---------- terminal ----------
-const term=new Terminal({fontFamily:'"JetBrains Mono", ui-monospace, monospace',fontSize:13.5,cursorBlink:true,
+let termFont=parseFloat(store.get('labtool-term-font'))||13.5;
+const term=new Terminal({fontFamily:'"JetBrains Mono", ui-monospace, monospace',fontSize:termFont,cursorBlink:true,
   theme:{background:getComputedStyle(document.documentElement).getPropertyValue('--term').trim()||'#16181d'},scrollback:5000});
 const fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open($('#term'));
 let tpos=0,tgen=-1,pending='',sending=false;
@@ -217,12 +266,18 @@ function copySel(){const s=term.getSelection();if(!s)return false;
   navigator.clipboard.writeText(s).then(()=>toast('Copied'),()=>toast('Copy blocked by the browser'));term.clearSelection();return true;}
 term.attachCustomKeyEventHandler(e=>{
   if(!(e.ctrlKey||e.metaKey)||e.altKey)return true;const k=e.key.toLowerCase();
+  if(k==='enter')return false;  // Ctrl+Enter = Check, handled by the page-wide shortcut below
   if(k==='c'&&(e.shiftKey||term.hasSelection())){if(e.type==='keydown'){e.preventDefault();copySel()||toast('Select some text first');}return false;}
   if(k==='v')return false;  // let the browser fire its paste event, which xterm turns into input
   return true;});
 $('#term').addEventListener('contextmenu',e=>{if(copySel())e.preventDefault();});
-function doFit(){try{fit.fit();api('/api/term/resize',{cols:term.cols,rows:term.rows});}catch(e){}}
+// refit on every size change; tell the shell its new size only once resizing pauses
+let sizeT=0,sentSize='';
+function doFit(){try{fit.fit();}catch(e){return;}clearTimeout(sizeT);sizeT=setTimeout(()=>{const s=term.cols+'x'+term.rows;
+  if(s!==sentSize){sentSize=s;api('/api/term/resize',{cols:term.cols,rows:term.rows}).catch(()=>{});}},120);}
 new ResizeObserver(()=>doFit()).observe($('#term'));
+function setTermFont(px){termFont=Math.max(10,Math.min(24,px));term.options.fontSize=termFont;store.set('labtool-term-font',termFont);doFit();}
+$('#fontDown').onclick=()=>setTermFont(termFont-1);$('#fontUp').onclick=()=>setTermFont(termFont+1);
 async function pollTerm(){
   try{const r=await api(`/api/term?since=${tpos}&gen=${tgen}`);
     if(r.reset){term.reset();}
@@ -242,7 +297,7 @@ async function loadTree(){
   if(sig!==lastTree){lastTree=sig;
     tree.innerHTML='';
     r.files.forEach(f=>{const depth=f.path.split('/').length-1;const div=document.createElement('div');
-      div.style.paddingLeft=(10+depth*14)+'px';div.textContent=(f.dir?'▸ ':'')+f.path.split('/').pop()+(f.dir?'/':'');
+      div.style.paddingLeft=(10+depth*14)+'px';div.textContent=(f.dir?'▸ ':'')+f.path.split('/').pop()+(f.dir?'/':'');div.title=f.path;
       if(f.dir)div.className='dir';else{div.onclick=()=>openFile(f.path);if(f.path===openPath)div.classList.add('sel');}
       div.dataset.path=f.path;tree.appendChild(div);});
   }
@@ -279,7 +334,8 @@ setInterval(()=>{if(!document.hidden)loadTree();},1500);
 // ---------- lab actions ----------
 async function openLab(id){
   if(dirty&&!confirm('You have unsaved changes. Discard them?'))return;
-  current=id;store.set('labtool-current',id);closeFile();lastTree='';$('#results').classList.remove('show');
+  current=id;store.set('labtool-current',id);closeFile();lastTree='';hideResults();
+  history.replaceState(null,'','#lab='+encodeURIComponent(id));
   const r=await api('/api/open',{lab:id});
   const t=topics.flatMap(x=>x.labs).find(l=>l.id===id);
   $('#title').innerHTML='';$('#title').append(t.title);const sm=document.createElement('small');sm.textContent='labs/'+id;$('#title').append(sm);
@@ -292,30 +348,80 @@ $('#setupBtn').onclick=async()=>{
   if(dirty&&!confirm('Reset discards your unsaved edit. Continue?'))return;
   const b=$('#setupBtn');b.disabled=true;b.textContent='Building…';closeFile();
   const r=await api('/api/setup',{});b.disabled=false;b.textContent='↺ Reset lab';
-  lastTree='';await loadTree();$('#results').classList.remove('show');
+  lastTree='';await loadTree();hideResults();
   toast(r.code===0?'Lab ready: fresh work/ folder':'setup.sh reported a problem, see terminal');
   if(r.code!==0){showResults('Setup output',r.output,false);}
   doFit();term.focus();
 };
-function showResults(head,text,ok){
+function showResults(head,text,ok,passed){
   $('#resultsHead').firstChild.textContent=head;$('#resultsHead').className='pane-h '+(ok?'ok':'bad');
-  $('#resultsBody').innerHTML=ansiToHtml(text.trim());$('#results').classList.add('show');doFit();
+  $('#resultsBody').innerHTML=ansiToHtml(text.trim());
+  $('#results').classList.toggle('passed',!!passed&&!!nextLabId());
+  $('#results').classList.add('show');$('#resGutter').classList.add('show');doFit();
 }
+function hideResults(){$('#results').classList.remove('show','passed');$('#resGutter').classList.remove('show');doFit();}
 $('#checkBtn').onclick=async()=>{
   if(dirty&&confirm('Save your open file before checking?'))await save();
   const b=$('#checkBtn');b.disabled=true;b.textContent='Checking…';
   const r=await api('/api/check',{});b.disabled=false;b.textContent='✓ Check';
-  const ok=r.code===0;showResults(ok?'All checks passed':'What was checked',r.output||r.error||'',ok);
+  const ok=r.code===0;showResults(ok?'All checks passed':'What was checked',r.output||r.error||'',ok,ok);
   if(ok){store.set(doneKey(current),'1');renderSide();}
 };
-$('#closeRes').onclick=()=>{$('#results').classList.remove('show');doFit();};
-$('#solBtn').onclick=async()=>{
-  if(!confirm('Tried it yourself first? The solution is more useful after an attempt.'))return;
-  const r=await api('/api/doc?which=solution');$('#solContent').innerHTML=marked.parse(r.text||'');$('#solModal').classList.add('show');
+$('#closeRes').onclick=()=>{hideResults();term.focus();};
+$('#nextBtn').onclick=()=>{const n=nextLabId();if(n)openLab(n);};
+
+// solution: ask "tried it first?" inside the dialog instead of a browser confirm()
+function closeSol(){$('#solModal').classList.remove('show');term.focus();}
+$('#solBtn').onclick=()=>{
+  $('#solContent').innerHTML='<div class="gate"><p>Tried it yourself first? The solution is more useful after an attempt.</p><button class="btn primary" id="revealSol">Show the solution</button></div>';
+  $('#solModal').classList.add('show');$('#revealSol').focus();
+  $('#revealSol').onclick=async()=>{const r=await api('/api/doc?which=solution');$('#solContent').innerHTML=marked.parse(r.text||'');$('#solContent').scrollTop=0;};
 };
-$('#closeSol').onclick=()=>$('#solModal').classList.remove('show');
-$('#solModal').onclick=e=>{if(e.target.id==='solModal')$('#solModal').classList.remove('show');};
+$('#closeSol').onclick=closeSol;
+$('#solModal').onclick=e=>{if(e.target.id==='solModal')closeSol();};
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&$('#solModal').classList.contains('show')){e.preventDefault();closeSol();}
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'&&!$('#checkBtn').disabled){e.preventDefault();$('#checkBtn').click();}
+});
 addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+
+// ---------- resizable panels ----------
+const LAYOUT_DEFAULTS={'--side-w':'250px','--mid-w':'44%','--task-h':'42%','--tree-w':'190px','--res-h':'40%'};
+let layout={};try{layout=JSON.parse(store.get('labtool-layout')||'{}')||{};}catch(e){}
+const rootStyle=document.documentElement.style;
+function setVar(k,v){rootStyle.setProperty(k,v);layout[k]=v;}
+function saveLayout(){store.set('labtool-layout',JSON.stringify(layout));}
+Object.keys(LAYOUT_DEFAULTS).forEach(k=>{if(layout[k])rootStyle.setProperty(k,layout[k]);});
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));
+const box=s=>$(s).getBoundingClientRect();
+// each divider: the variable it sets, computed from the pointer position
+const GUTTERS={
+  side:{v:'--side-w',at:(x)=>clamp(x-box('.app').left,170,460)+'px'},
+  mid:{v:'--mid-w',at:(x)=>{const a=box('.app'),m=box('#midCol');return (clamp(x-m.left,300,a.right-340-m.left)/a.width*100).toFixed(2)+'%';}},
+  task:{v:'--task-h',at:(x,y)=>{const c=box('#midCol');return (clamp(y-c.top,60,c.height-90)/c.height*100).toFixed(2)+'%';}},
+  tree:{v:'--tree-w',at:(x)=>{const b=box('.files-body');return clamp(x-b.left,90,b.width-160)+'px';}},
+  res:{v:'--res-h',at:(x,y)=>{const c=box('#termCol');return (clamp(c.bottom-y,70,c.height-80)/c.height*100).toFixed(2)+'%';}},
+};
+document.querySelectorAll('.gutter').forEach(g=>{
+  const G=GUTTERS[g.dataset.g],row=g.classList.contains('row');
+  g.tabIndex=0;g.setAttribute('role','separator');g.setAttribute('aria-orientation',row?'horizontal':'vertical');
+  g.title='Drag to resize · double-click to reset';
+  g.addEventListener('pointerdown',e=>{
+    if(e.button!==0)return;e.preventDefault();g.setPointerCapture(e.pointerId);
+    g.classList.add('active');document.body.classList.add('dragging',row?'drag-row':'drag-col');
+    let raf=0;const move=ev=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>setVar(G.v,G.at(ev.clientX,ev.clientY)));};
+    const up=()=>{g.removeEventListener('pointermove',move);g.removeEventListener('pointerup',up);g.removeEventListener('pointercancel',up);
+      g.classList.remove('active');document.body.classList.remove('dragging','drag-row','drag-col');saveLayout();};
+    g.addEventListener('pointermove',move);g.addEventListener('pointerup',up);g.addEventListener('pointercancel',up);
+  });
+  g.addEventListener('dblclick',()=>{setVar(G.v,LAYOUT_DEFAULTS[G.v]);saveLayout();});
+  g.addEventListener('keydown',e=>{const d={ArrowLeft:-24,ArrowUp:-24,ArrowRight:24,ArrowDown:24}[e.key];if(!d)return;e.preventDefault();
+    const r=g.getBoundingClientRect();setVar(G.v,G.at(r.left+(row?0:d),r.top+(row?d:0)));saveLayout();});
+});
+// hide / show the lab list to give the task and terminal more room
+function setSide(show){document.body.classList.toggle('noside-mode',!show);store.set('labtool-side',show?'1':'0');$('#sideBtn').setAttribute('aria-pressed',String(!show));}
+setSide(store.get('labtool-side')!=='0');
+$('#sideBtn').onclick=()=>setSide(document.body.classList.contains('noside-mode'));
 
 (async()=>{const r=await api('/api/labs');topics=r.topics;renderSide();
   const fromHash=decodeURIComponent((location.hash.match(/lab=([^&]+)/)||[])[1]||'');const last=fromHash||store.get('labtool-current');if(last&&topics.some(t=>t.labs.some(l=>l.id===last)))openLab(last);})();
