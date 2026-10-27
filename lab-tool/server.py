@@ -176,6 +176,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path == "/":
                 return self.send((HERE / "index.html").read_bytes(), ctype="text/html; charset=utf-8")
+            if u.path.startswith("/vendor/"):  # bundled xterm/marked, so the tool works offline
+                name = u.path[len("/vendor/"):]
+                f = HERE / "vendor" / name
+                if "/" in name or not f.is_file():
+                    return self.send({"error": "not found"}, 404)
+                ctype = "text/css" if name.endswith(".css") else "application/javascript"
+                return self.send(f.read_bytes(), ctype=ctype + "; charset=utf-8")
+            if u.path == "/guide":  # the study guide (topic guides + theory questions)
+                return self.send((HERE.parent / "guide.html").read_bytes(), ctype="text/html; charset=utf-8")
             if u.path == "/api/labs":
                 return self.send({"topics": list_labs(), "current": STATE["lab"]})
             if u.path == "/api/term":
