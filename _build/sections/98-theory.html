@@ -1,0 +1,1221 @@
+<section class="topic" id="theory" data-title="Theory questions">
+  <header class="topic-head">
+    <span class="tag">Question bank</span>
+    <h2>Theory question bank (quiz 2 syllabus)</h2>
+    <p class="lede">About 85 new multiple-choice questions in the quiz style (a scenario, then "choose all that apply" or one answer), each with the reason every option is right or wrong.</p>
+  </header>
+
+  <div class="model"><h3>How to use this</h3>
+    <p><b>Answer before you open.</b> Write down your letters first, then click <b>Show answer</b>. If you open it first, you only learn to recognise the answer. You don't learn to produce it.</p>
+    <p>For "choose all that apply", look at each option on its own and decide true or false. Several options can be right, and the wrong ones are common misconceptions.</p>
+    <p>The explanation says <b>why</b> each wrong option is wrong. Read it even when you got the question right.</p>
+    <p>Levels: <span class="lvl drill">Drill</span> = recall, <span class="lvl quiz">Quiz-style</span> = quiz level, <span class="lvl twist">Twist</span> = harder than the quiz, or mixes two topics.</p>
+  </div>
+
+  <div class="callout tip"><strong>What the quiz covers</strong><p>Quiz 2A tested git internals and rebase (T2L1), testing and CI (T2L2), containers (T3L1), database migrations (T3L2) and architecture (T4L1). This bank gives those topics the most questions. The last question set before the rapid-fire facts is a short review of the earlier lectures (T0/T1), because ideas like the four locations, ports and secrets come up again inside the later topics.</p></div>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-internals">Git internals: objects, hashes, diff and merge (T2L1)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> What a blob knows</summary>
+    <div class="body"><p>A repo has <code>src/app.py</code> and <code>backup/app.py</code>, and the two files have exactly the same bytes. You then rename <code>src/app.py</code> to <code>src/main.py</code> and change nothing else. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>A blob stores only the file's bytes. It has no file name or path.</li>
+        <li>The two identical files are stored as one blob.</li>
+        <li>The rename creates a new blob, because the name is part of the blob.</li>
+        <li>The file name lives in the tree object that points to the blob.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A blob's id is a hash of its content alone, so identical bytes give the same id, and Git never stores the same bytes twice. Names live one level up, in a tree (<code>100644 blob 3f9a1c2 app.py</code>). After the rename, the <b>tree</b> changes and so the commit is new, but the blob is reused. C is wrong because the name is not inside the blob.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> What is inside a commit object?</summary>
+    <div class="body"><p><code>git cat-file -p HEAD</code> prints a commit object. Which of these does a commit object store? Choose all that apply.</p>
+      <ol type="A">
+        <li>The hash of one tree (the snapshot of the whole project)</li>
+        <li>The hash of its parent commit(s)</li>
+        <li>A diff of the lines that changed since the parent</li>
+        <li>Author, committer, timestamps and the message</li>
+        <li>The name of the branch it was made on</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A commit is <code>tree</code> + <code>parent</code> + author/committer + message. It is a full snapshot, not a diff, so C is wrong: <code>git diff</code> works out the changes each time you ask. Branch names are not stored in commits (E). A branch is a separate file that points to a commit.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Two branches, one commit, then a commit</summary>
+    <div class="body"><p><code>main</code> and <code>feature</code> both point to commit <code>c41a2e0</code>. You are on <code>feature</code> and you make one commit, <code>9d03b7f</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>.git/refs/heads/feature</code> is overwritten with the hash <code>9d03b7f…</code>.</li>
+        <li><code>.git/refs/heads/main</code> still holds <code>c41a2e0…</code>.</li>
+        <li>The parent of <code>9d03b7f</code> is <code>c41a2e0</code>.</li>
+        <li>main also moves, because the two branches shared a commit.</li>
+        <li>Git copied all project files into a new folder for <code>feature</code> when the branch was created.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> A branch is a small text file holding one commit hash. Committing rewrites only the file of the branch HEAD points to. Branches are separate pointers, not containers, so pointing at the same commit doesn't tie them together (D). Making a branch writes one pointer file and copies no files (E). That is why branching is instant.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Amend only the message</summary>
+    <div class="body"><p>You just made commit <code>5e1f0aa</code> "Add lgoin form". You run <code>git commit --amend -m "Add login form"</code> and change no files. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The commit gets a new ID, because the message is part of the hashed content.</li>
+        <li>The new commit points to the same tree as <code>5e1f0aa</code>.</li>
+        <li><code>5e1f0aa</code> is deleted from <code>.git/objects</code> at once.</li>
+        <li><code>5e1f0aa</code> is still listed in <code>git reflog</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> The ID is a hash of the tree, parent, metadata and message, so a new message means a new commit. No file changed, so the tree hash is identical. The old commit is now unreachable from any branch, but it is still in the object database and in the reflog. It only disappears when <code>git gc</code> prunes it after the grace period, so C is wrong.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Fix one old message: which IDs change?</summary>
+    <div class="body"><pre class="term">d4e5f60 (HEAD -&gt; main) Add tests
+c3d4e5f Add search route
+b2c3d4e Add databse layer
+a1b2c3d Initial commit</pre>
+      <p>You use an interactive rebase to change only the message of <code>b2c3d4e</code> to "Add database layer". Which commits on main get a new ID?</p>
+      <ol type="A">
+        <li>Only the commit whose message changed</li>
+        <li>That commit and every commit after it ("Add search route" and "Add tests")</li>
+        <li>All four, because rebase rewrites the whole branch</li>
+        <li>None, because no file content changed</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> Each commit stores its parent's hash. A new message gives "Add database layer" a new ID. Then "Add search route" has a new parent hash, so it gets a new ID too, and the change carries on to the tip. That is why rewriting history changes every later ID. "Initial commit" is not touched, so C is wrong. D is wrong because the message is hashed as well as the files.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> One byte flipped on disk</summary>
+    <div class="body"><p>A disk error flips one byte inside a blob file under <code>.git/objects</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Git can detect it, because the content no longer hashes to the object's name.</li>
+        <li>Git can't notice, because objects are looked up by file name.</li>
+        <li>The content still exists but the address is wrong, so the object can no longer be trusted.</li>
+        <li>Content addressing is the same idea used for CDN cache keys and Merkle trees.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, C, D.</b> An object's name <b>is</b> the hash of its content (<code>id = SHA1(content)</code>), so a change of one byte breaks the match and <code>git fsck</code> reports it. Git looks everything up by hash, not by file name (B). Because the name is derived from the content, you can check data without trusting whoever gave it to you.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Predict the diff</summary>
+    <div class="body"><p>The committed <code>steps.txt</code> has 4 lines: <code>a</code>, <code>b</code>, <code>c</code>, <code>d</code>. You delete line <code>b</code>. What does <code>git diff</code> show (ignoring the header)?</p>
+      <ol type="A">
+        <li><pre class="term"> a
+-b
+ c
+ d</pre></li>
+        <li><pre class="term">-a
+-b
+-c
+-d
++a
++c
++d</pre></li>
+        <li><pre class="term"> a
+-b
++c
+-c
+ d</pre></li>
+        <li>Nothing. Git stores diffs only for commits, not for the working tree.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Myers finds the <b>shortest edit script</b>: one deletion, with the matching lines kept as context (diagonal moves cost 0). B is a valid edit script, but it is 7 edits, not the shortest. C makes no sense. D is wrong: <code>git diff</code> computes the change between the working tree and the staging area on demand.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Two shortest scripts: which one does Myers pick?</summary>
+    <div class="body"><p>Old file: <code>x</code>, <code>y</code>. New file: <code>y</code>, <code>x</code>. Two edit scripts of length 2 exist: (1) delete <code>x</code>, keep <code>y</code>, insert <code>x</code>; (2) insert <code>y</code>, keep <code>x</code>, delete <code>y</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Both scripts are shortest (d = 2).</li>
+        <li>Myers prefers deleting over inserting, so git shows <code>-x</code>, then <code> y</code>, then <code>+x</code>.</li>
+        <li>Myers picks one at random each run, so the output can change.</li>
+        <li>A replace-all script (delete both, insert both, d = 4) is equally good because the result is the same.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> When two scripts are equally short, Myers takes the deletion first. That gives the same output every run, so C is wrong. D gives the same file but is not the <b>shortest</b> edit script, and that is the only thing Myers looks for.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Why git diff is fast on huge, almost identical files</summary>
+    <div class="body"><p>Two versions of a 200,000-line file differ in 3 lines. Why does <code>git diff</code> answer at once?</p>
+      <ol type="A">
+        <li>Myers runs in O((m+n)·d) time, and d (the number of edits) is tiny here.</li>
+        <li>Git stored the 3-line diff when you committed.</li>
+        <li>Myers compares every line with every other line, O(m·n), and computers are fast.</li>
+        <li>Git compares only the file sizes.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Myers's cost grows with the size of the edit script d. It follows the free diagonals (matching lines) and never walks one twice. Its memory is O(m+n). Git stores snapshots, not diffs (B). O(m·n log m) is roughly the older Hunt–McIlroy LCS approach (C). Sizes alone can't say which lines changed (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Why a three-way merge needs the base</summary>
+    <div class="body"><p>You merge <code>feature</code> into <code>main</code>. Which statements about the three-way merge are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Git computes diff(base, main) and diff(base, feature) with the same diff engine.</li>
+        <li>Without the base, Git couldn't tell whether a line was added on one side or deleted on the other.</li>
+        <li>Git compares the two tips directly and makes a conflict wherever they differ.</li>
+        <li>If main edits line 10 and feature edits line 40, both changes are kept with no conflict.</li>
+        <li>A conflict means Git has crashed and the merge must be redone from scratch.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Two Myers edit scripts are made against the common ancestor. If they touch different regions, both apply cleanly. If both sides touched the same region, Git has two valid edits and no rule to choose, so it stops and asks you. That refusal is correct behaviour, not a crash (E). Comparing only the two tips (C) would make every difference look like a conflict.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Merge, rebase, squash: three claims about history</summary>
+    <div class="body"><p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>A merge keeps both timelines exactly as they happened, joined by a merge commit with two parents.</li>
+        <li>A rebase replays your commits on a new base, which gives them new hashes and a straight line.</li>
+        <li>A squash is a rebase whose commits are collapsed into one.</li>
+        <li>A rebase keeps the original commit IDs and only moves the branch pointer.</li>
+        <li>A squash keeps each original commit on main, so <code>git log</code> still shows them one by one.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Merge treats history as an accurate ledger. Rebase and squash treat it as a readable story. A replayed commit has a new parent, so it must get a new ID (D is wrong). A squash leaves one commit on main, and the individual commits are not part of main's history (E).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Predict the graph after a rebase</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> git log --graph --oneline --all
+* 9c1d2e3 (HEAD -&gt; feature) Add search box
+* 7b2c3d4 Add search route
+| * 4e5f6a7 (main) Fix footer typo
+|/
+* 1a0b2c3 Initial commit</pre>
+      <p>You run <code>git rebase main</code> and there are no conflicts. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git log --oneline feature</code> now lists: Add search box, Add search route, Fix footer typo, Initial commit.</li>
+        <li>The new copy of "Add search route" has <code>4e5f6a7</code> as its parent.</li>
+        <li>main still points to <code>4e5f6a7</code>.</li>
+        <li><code>9c1d2e3</code> is still reachable from <code>feature</code>.</li>
+        <li>Running <code>git switch main</code>, then <code>git merge feature</code>, is now a fast-forward.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, E.</b> Rebase copies the two feature commits on top of main's tip, so feature now contains the footer fix and is a straight line ahead of main. Main itself does not move. The old commits get new IDs, so <code>9c1d2e3</code> is no longer on feature (D is wrong). You can only find it through the reflog until gc. Since main is now an ancestor of feature, merging just moves main forward.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Delete an unmerged branch, then gc</summary>
+    <div class="body"><p>Branch <code>exp</code> has two commits that are on no other branch. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git branch -d exp</code> refuses with "not fully merged".</li>
+        <li>After <code>git branch -D exp</code>, the two commits are unreachable but still in the object database.</li>
+        <li><code>git gc</code> right after the delete removes them at once.</li>
+        <li>You can recover them with <code>git branch exp &lt;hash&gt;</code>, using a hash from <code>git reflog</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Lowercase <code>-d</code> protects unmerged work, and capital <code>-D</code> forces the delete. Deleting a branch removes only the pointer file. The commits are unreachable but intact. They are also still referenced by the reflog, and gc only prunes them after its grace period (C is wrong). Pointing a new branch at the tip brings back both commits, because each commit links to its parent.</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-remotes">Remotes, undo and recovery (T0L1 + T2L1)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Clean status, but teammates can't see it</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> git status
+On branch main
+Your branch is ahead of 'origin/main' by 2 commits.
+  (use "git push" to publish your local commits)
+
+nothing to commit, working tree clean</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The local repository and the remote disagree.</li>
+        <li><code>git push</code> sends the 2 commits and moves origin's main.</li>
+        <li>The working directory and the staging area disagree.</li>
+        <li><code>git status</code> just asked GitHub how many commits it has.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> "Working tree clean" means the first three locations agree. "Ahead by 2" compares your main with <code>origin/main</code>, which is your <b>last downloaded copy</b> of the remote. <code>git status</code> never contacts the server (D is wrong), so the count can be out of date until you <code>git fetch</code>. C is wrong because the tree is clean.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What fetch changes</summary>
+    <div class="body"><p>You are on <code>main</code> with one local commit that isn't pushed and an unstaged edit to <code>api.py</code>. A teammate pushed 3 commits. You run <code>git fetch origin</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>origin/main</code> now includes the 3 commits.</li>
+        <li>Your <code>main</code> is unchanged and <code>api.py</code> keeps your edit.</li>
+        <li><code>git status</code> may now say your branch and 'origin/main' have diverged.</li>
+        <li>Your local commit was uploaded too.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Fetch only downloads, and it updates only the remote-tracking pointer. You have 1 commit they don't have, and they have 3 you don't, so the branches have diverged (1 and 3). Uploading is <code>git push</code> (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> git pull refuses on a diverged branch</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> git pull
+hint: You have divergent branches and need to specify how to reconcile them.
+...
+fatal: Need to specify how to reconcile divergent branches.</pre>
+      <p>Your push was rejected earlier because main and origin/main diverged. Which commands integrate the teammate's work so that your next push is accepted? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git pull --no-rebase</code> (merge), then <code>git push</code></li>
+        <li><code>git pull --rebase</code>, then <code>git push</code></li>
+        <li><code>git fetch</code>, then <code>git merge origin/main</code>, then <code>git push</code></li>
+        <li><code>git push --force</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Recent Git versions don't guess between merge and rebase when the branches have diverged and no <code>pull.rebase</code> setting exists. You have to pick one. A and C make a merge commit with both commits. B replays your commit on top of theirs (it gets a new ID) and gives a straight line. A force-push overwrites origin's main and erases the teammate's commit (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Unstage, but keep the edit</summary>
+    <div class="body"><p>You ran <code>git add config.py secrets.txt</code>. You want <code>secrets.txt</code> out of the next commit, but the file must stay on disk unchanged. Which commands do that? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git restore --staged secrets.txt</code></li>
+        <li><code>git reset secrets.txt</code></li>
+        <li><code>git restore secrets.txt</code></li>
+        <li><code>git rm secrets.txt</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> Both copy the HEAD version back into the staging area and leave the working directory alone. <code>git restore &lt;file&gt;</code> (without <code>--staged</code>) does the opposite: it overwrites the working copy with the staged copy and leaves it staged (C). <code>git rm</code> deletes the file from disk and stages the deletion (D). To keep the file out of git for good, add it to <code>.gitignore</code> as well.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Predict status after reset --soft</summary>
+    <div class="body"><pre class="term">c3 (HEAD -&gt; main) Add retry logic   <span class="c"># changed net.py</span>
+c2 Add client
+c1 Initial commit</pre>
+      <p>Nothing is pushed and the tree is clean. You run <code>git reset --soft HEAD~1</code>. What does <code>git status</code> show?</p>
+      <ol type="A">
+        <li>main is at c2, and <code>net.py</code> is under "Changes to be committed"</li>
+        <li>main is at c2, and <code>net.py</code> is under "Changes not staged for commit"</li>
+        <li>main is at c2, the tree is clean, and the retry change is gone from disk</li>
+        <li>main is still at c3, with a new commit that undoes c3</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> <code>--soft</code> moves only the branch pointer and keeps the staging area and files, so the change is staged and ready to commit again. B is <code>--mixed</code> (the default): pointer and staging area reset, files kept. C is <code>--hard</code>. D describes <code>git revert</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A bad commit is already on shared main</summary>
+    <div class="body"><p>Commit <code>8f2a1b0</code> on main broke checkout. It was pushed an hour ago, and three teammates have pulled since. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git revert 8f2a1b0</code>, then <code>git push</code>, is the safe undo.</li>
+        <li>After the revert, <code>8f2a1b0</code> is still in history, followed by a new commit that undoes it.</li>
+        <li><code>git reset --hard HEAD~1</code> then <code>git push --force</code> is just as safe, because it gives a cleaner history.</li>
+        <li>The revert needs no force-push, because it only adds a commit.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Revert undoes the change by <b>adding</b> history, so everyone's clones stay consistent and the push is a fast-forward. Reset and force-push rewrite shared history (C). Teammates who already have <code>8f2a1b0</code> would bring it back on their next push, and any commit pushed after it would be lost.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Two commits made on a detached HEAD</summary>
+    <div class="body"><p>You ran <code>git checkout v1.0</code> (a tag), then made commit <code>d1</code> and then <code>d2</code> (which has <code>d1</code> as its parent). Then you ran <code>git switch main</code>. You want a branch <code>hotfix</code> that contains <b>both</b> commits. Which commands work? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>git branch hotfix &lt;hash of d2&gt;</code></li>
+        <li><code>git branch hotfix HEAD@{1}</code></li>
+        <li><code>git branch hotfix &lt;hash of d1&gt;</code></li>
+        <li><code>git switch -c hotfix</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> A branch at <code>d2</code> includes <code>d1</code>, because <code>d2</code>'s parent is <code>d1</code>. In the reflog, <code>HEAD@{0}</code> is the switch to main, so <code>HEAD@{1}</code> is where HEAD was just before: <code>d2</code>. A branch at <code>d1</code> loses <code>d2</code> (C). <code>switch -c</code> creates the branch at your current commit, which is main's tip (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> You rebased a branch you had already pushed</summary>
+    <div class="body"><p>Only you work on <code>feature/search</code>. You pushed it, then ran <code>git rebase main</code>. Now <code>git push</code> is rejected (non-fast-forward). Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The push is rejected because the rebased commits have new IDs, so origin's tip is not in your history any more.</li>
+        <li><code>git push --force-with-lease</code> is the right fix here.</li>
+        <li><code>git pull</code> then <code>git push</code> is the cleanest fix.</li>
+        <li>The same move on shared <code>main</code> would be dangerous.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Rebase made copies, so the old tip on origin is no longer an ancestor of yours. Since nobody else uses the branch, replacing it is fine, and <code>--force-with-lease</code> refuses if origin moved since your last fetch. Pulling (C) would merge the old copies back in, so every commit would appear twice. On a shared branch, rewriting history breaks everyone else's clones.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> What stash keeps</summary>
+    <div class="body"><p>You have an unstaged edit to <code>app.py</code> and a brand-new untracked file <code>notes.md</code>. You run <code>git stash</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>app.py</code> goes back to its last committed state.</li>
+        <li><code>notes.md</code> stays in the folder, because untracked files are not stashed by default.</li>
+        <li><code>git stash pop</code> re-applies the edit and drops that stash entry.</li>
+        <li>The stash is pushed to origin so teammates can see it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> A stash is a local "desk drawer" for tracked changes. It saves both staged and unstaged changes. Untracked files need <code>git stash -u</code>. Stashes are never pushed (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Inside a conflict</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> git merge feature/pricing
+CONFLICT (content): Merge conflict in price.py
+<span class="p">$</span> cat price.py
+&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD
+TAX = 0.18
+=======
+TAX = 0.12
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; feature/pricing</pre>
+      <p>You are on main. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>TAX = 0.18</code> is main's version.</li>
+        <li>After editing the file, <code>git add price.py</code> then <code>git commit</code> finishes the merge.</li>
+        <li><code>git merge --abort</code> returns to the state before the merge.</li>
+        <li>Git chose 0.12 because the incoming branch always wins.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The part between <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</code> and <code>=======</code> is your checked-out branch. The part after it is the incoming branch. Staging the resolved file marks it resolved, and the commit records the merge with two parents (<code>git merge --continue</code> works too). Git chose nothing (D). Both sides changed the same line, so it shows both and stops.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> .gitignore added too late</summary>
+    <div class="body"><p><code>debug.log</code> was committed last week. Today you add <code>*.log</code> to <code>.gitignore</code>, but <code>git status</code> still shows <code>modified: debug.log</code>. Which single step stops git from tracking it but keeps the file on disk?</p>
+      <ol type="A">
+        <li><code>git rm --cached debug.log</code>, then commit</li>
+        <li>Nothing: wait, and .gitignore applies from the next commit</li>
+        <li><code>git restore debug.log</code></li>
+        <li><code>rm debug.log</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> .gitignore only affects <b>untracked</b> files. Once a file is tracked, git keeps tracking it. <code>rm --cached</code> removes it from the staging area (so the next commit stops tracking it) and leaves it on disk. Old commits still contain it, which matters if it held a secret. C only throws away the current edits. D deletes the file and stages nothing.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> commit -a and a new file</summary>
+    <div class="body"><p>You edited the tracked file <code>app.py</code> and created a new file <code>util.py</code>. You run <code>git commit -am "Add helper"</code>. What happens?</p>
+      <ol type="A">
+        <li>The commit has the <code>app.py</code> change. <code>util.py</code> is still untracked.</li>
+        <li>The commit has both files.</li>
+        <li>Git refuses, because an untracked file exists.</li>
+        <li>The commit has only <code>util.py</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> <code>-a</code> stages changes to files git <b>already tracks</b>. A new file needs an explicit <code>git add</code> first. Untracked files never block a commit (C).</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-testing">Testing and CI (T2L2)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Which of these are integration tests?</summary>
+    <div class="body"><p>Choose all that apply.</p>
+      <ol type="A">
+        <li><code>POST /api/users</code> twice with the same email, against a disposable test database, expecting 409</li>
+        <li><code>calculate_gst(1000)</code> returns 180</li>
+        <li>A browser opens /signup, creates an account, and lands on /dashboard</li>
+        <li>A repository function saves a row to a real Postgres test database, then reads it back</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D.</b> Integration tests check real components working together: route, validation, ORM and database. B is a unit test (pure logic, no network or database). C is end-to-end (browser plus the whole stack). A duplicate-email check needs a real database to find the existing row, so it can't be a unit test.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Boundary cases for a range</summary>
+    <div class="body"><p>Rule: "A username has 3 to 12 characters (inclusive)." Which input lengths are <b>boundary</b> cases? Choose all that apply.</p>
+      <ol type="A"><li>2</li><li>3</li><li>7</li><li>12</li><li>13</li></ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D, E.</b> Each edge needs one test just outside it and one exactly on it: 2/3 at the bottom and 12/13 at the top. 7 is a normal (valid-class) case. It's worth having, but it is not on a boundary. Most real defects sit at these edges, such as <code>&gt;</code> written where <code>&gt;=</code> was meant.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> 100% coverage, no assertion (pytest)</summary>
+    <div class="body"><pre class="term">def discount(total, is_member):
+    if is_member and total &gt; 100:
+        return total * 0.9
+    return total
+
+def test_discount():
+    discount(200, True)
+    discount(50, False)</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Line coverage of <code>discount</code> is 100%.</li>
+        <li>If someone changed <code>0.9</code> to <code>0.5</code>, this test would still pass.</li>
+        <li>pytest marks this test as failed, because it contains no <code>assert</code>.</li>
+        <li>Adding <code>assert discount(200, True) == 180</code> would catch the 0.5 change.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Both paths of the <code>if</code> run, so every line executes. Coverage measures <b>execution</b>, not whether anything was checked. pytest passes a test that finishes without an exception, so C is wrong. That is exactly why this test proves nothing. An assertion on the result turns it into a behavioural claim.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> A mutant that survives</summary>
+    <div class="body"><pre class="term"><span class="c"># original</span>
+def can_vote(age): return age &gt;= 18
+<span class="c"># mutant made by the tool</span>
+def can_vote(age): return age &gt; 18
+
+def test_child(): assert can_vote(10) is False
+def test_adult(): assert can_vote(30) is True</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The mutant survives: both tests still pass against it.</li>
+        <li>Adding <code>assert can_vote(18) is True</code> kills the mutant.</li>
+        <li>A surviving mutant proves the original code has a bug.</li>
+        <li>Line coverage is 100%, so the suite is strong.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> 10 and 30 give the same answers under <code>&gt;=</code> and <code>&gt;</code>. Only the boundary value 18 tells them apart. A surviving mutant means the <b>tests</b> can't distinguish the change. It says nothing about a bug in the original code (C). Full coverage with a surviving mutant is exactly the blind spot coverage has (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Name the test double</summary>
+    <div class="body"><p>(1) A class with <code>save()</code> and <code>find()</code> that keeps users in a Python dict. (2) A function that always returns the exchange rate <code>83.0</code>. (3) An object the test checks with <code>email.send.assert_called_once_with("a@x.com")</code>. Which line names them correctly?</p>
+      <ol type="A">
+        <li>(1) fake, (2) stub, (3) mock</li>
+        <li>(1) mock, (2) fake, (3) stub</li>
+        <li>(1) stub, (2) mock, (3) fake</li>
+        <li>All three are mocks. The words mean the same thing.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> A <b>fake</b> is a working but simplified implementation (an in-memory database). A <b>stub</b> returns a fixed, canned value. A <b>mock</b> records how it was called, so the test can assert on that call. Use a double only at a slow, unsafe, costly or external boundary, never in place of the behaviour the test claims to prove.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Over-mocked signup test</summary>
+    <div class="body"><pre class="term">def test_register():
+    repo = Mock()
+    register(repo, {"email": "a@x.com", "password": "short"})
+    repo.save.assert_called()</pre>
+      <p><code>register</code> is supposed to reject passwords under 8 characters. The test passes. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The test passing shows <code>register</code> saves a user with a 5-character password, which is the bug.</li>
+        <li>The test proves only that <code>save</code> was called, not that registration behaves correctly.</li>
+        <li>A behaviour-focused test would assert that the short password is rejected and that no user is stored.</li>
+        <li>Replacing the Mock with a real production database would make it a better unit test.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The test asserts that an interaction happened, so it actually locks in the buggy behaviour. A good test states the rule: invalid input, then rejected, then nothing persisted (an in-memory fake makes the "nothing stored" part checkable). Automated tests must never use production data (D). The integration level uses a disposable test database.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Passes alone, fails in the suite</summary>
+    <div class="body"><p><code>test_create_user</code> inserts <code>a@x.com</code> into a shared test database and never cleans up. <code>test_user_count</code> asserts the table has 0 rows. Run alone, each passes. <code>pytest</code> on the whole file fails <code>test_user_count</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The tests are not independent: one leaves state that the other trips over.</li>
+        <li>Each test should set up and clean up its own data (for example a fresh, disposable database per test).</li>
+        <li>pytest runs tests in a random order by default, which caused this.</li>
+        <li>Good tests pass whether they run first or last.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Test order must not matter, and each test must clean up its own state. pytest runs tests in file order by default, not randomly (C). The order is what exposed the leftover row, but it did not cause it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Red only on weekends</summary>
+    <div class="body"><pre class="term">def test_shop_open():
+    assert is_open(datetime.now()) is True</pre>
+      <p>CI is green Monday to Friday and red on Saturday and Sunday. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The test depends on the clock, which nothing controls, so it is not deterministic.</li>
+        <li>The fix is to pass fixed dates, e.g. <code>is_open(datetime(2026, 10, 26, 10, 0))</code>, and add a weekend case too.</li>
+        <li>Re-running the CI job until it is green is an acceptable fix.</li>
+        <li>A flaky test weakens CI, because people learn to ignore a red status.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Tests must give the same result every run. Clock, network and random values are only OK when the test controls them. Re-running hides the problem and keeps the test unreliable (C).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The two-commit fix</summary>
+    <div class="body"><p>A seeded defect: <code>is_valid_length("abcdefgh")</code> returns False (8 characters should be valid). The milestone wants it fixed in two commits. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Commit 1 adds a test that fails against the current code. Commit 2 fixes the code and the test passes.</li>
+        <li>Seeing the test fail first shows it really reproduces the bug.</li>
+        <li>A test written after the fix, which has only ever passed, might not detect the bug at all.</li>
+        <li>CI should be green on both commits, otherwise the workflow is wrong.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Reproduce, then red, then fix, then green. The failing test is evidence, in code, that you caught the defect. After that it guards against the bug coming back (a regression). Commit 1 is <b>expected</b> to be red (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Predict a workflow run</summary>
+    <div class="body"><pre class="term">on:
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: ruff check .
+      - run: pytest</pre>
+      <p>A pull request into main has a lint error, so <code>ruff check .</code> exits with code 1. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The <code>pytest</code> step is skipped.</li>
+        <li>The <code>test</code> job fails and the pull request shows a red check.</li>
+        <li>pytest still runs, because every step is independent.</li>
+        <li>A direct push to main also triggers this workflow.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> Any step that exits non-zero fails the job, and later steps are skipped unless they say <code>if: always()</code>. Steps run in order on one runner, so C is wrong. The only trigger is <code>pull_request</code>, so a push to main does not run it (D). The course workflow lists both <code>pull_request</code> and <code>push</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Works on my machine</summary>
+    <div class="body"><pre class="term">tests/test_fetch.py:1: in &lt;module&gt;
+    import requests
+E   ModuleNotFoundError: No module named 'requests'
+Error: Process completed with exit code 1.</pre>
+      <p>pytest passes on your laptop. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>requests</code> is installed on your laptop but missing from <code>requirements.txt</code>.</li>
+        <li>The CI runner starts clean and has only what the repository declares.</li>
+        <li>The fix is to add the dependency to the declared requirements (and lockfile), push, and let CI run again.</li>
+        <li>Re-run the job: CI runners sometimes forget packages.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> This is the kind of mistake CI exists to catch: an undeclared package that was installed on your laptop long ago. Read the first meaningful error, find the command that failed, fix the declaration, push. A re-run (D) fails the same way, because the clean runner still lacks it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> A green check with a failing test</summary>
+    <div class="body"><pre class="term">      - run: pytest
+        continue-on-error: true</pre>
+      <p>The CI job is a required status check on main. A pull request breaks a unit test. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The pytest step fails, but the job still finishes as successful.</li>
+        <li>The required check is green, so branch protection allows the merge.</li>
+        <li>Branch protection reads the test results directly and still blocks the merge.</li>
+        <li>Removing <code>continue-on-error</code> makes the failing test block the merge again.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> <code>continue-on-error</code> tells Actions to ignore that step's failure, so the job passes. Branch protection sees only the check's status, not the tests inside it (C). This setting quietly turns the gate off.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A database for integration tests in CI</summary>
+    <div class="body"><p>The job declares <code>services: test-db: image: postgres:16</code> with a health check, then runs the migrations and the integration tests. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The service database exists only for this job and is thrown away when the job ends.</li>
+        <li>The schema should be applied (migrations run) before the integration tests.</li>
+        <li>Its URL should come from a test-only environment variable, never one that looks like production.</li>
+        <li>Data seeded in one workflow run is still there in the next run, so seed it once.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The integration-test lifecycle is: create a disposable environment, apply the schema, seed only the data needed, run the tests, discard. Every run starts fresh (D). That freshness is what makes the run reproducible.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> An upside-down pyramid</summary>
+    <div class="body"><p>A team tests every validation edge case with browser E2E tests. The suite takes 40 minutes and fails at random. Which advice matches the lecture? Choose all that apply.</p>
+      <ol type="A">
+        <li>Move edge cases into unit tests: they are fast, isolated, and point at one function.</li>
+        <li>Keep E2E tests for a few business-critical journeys (signup and login, checkout).</li>
+        <li>The pyramid is a budget heuristic: many unit tests, some integration tests, few E2E tests.</li>
+        <li>Delete the unit tests, because E2E tests give the broadest confidence.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> E2E tests are the slowest, most brittle and hardest to debug: a failure points at a whole journey. Each level gives different evidence at a different cost, so a balanced set beats maximising one level (D).</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-docker">Containers and Docker (T3L1)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Image, container, volume, VM</summary>
+    <div class="body"><p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>An image is an immutable, tagged set of filesystem layers plus metadata, including a default command.</li>
+        <li>A container is a running instance of an image, with its own thin writable layer.</li>
+        <li>Each container boots its own kernel, like a VM.</li>
+        <li>A volume's lifecycle is independent of any container.</li>
+        <li>Three apps in three VMs on one host means three guest kernels.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D, E.</b> A container is one or more ordinary Linux processes, isolated by kernel features and <b>sharing the host's kernel</b>. That shared kernel is the security boundary. Only VMs have a guest kernel each (C is wrong).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Two containers, same port inside</summary>
+    <div class="body"><p>Images <code>a</code> and <code>b</code> both run a server on port 3000. You run <code>docker run -d -p 8080:3000 a</code>, then <code>docker run -d -p 8080:3000 b</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Both servers can listen on 3000, because each container has its own network namespace.</li>
+        <li>The second run fails because host port 8080 is already allocated.</li>
+        <li><code>-p 8081:3000</code> for <code>b</code> works, and the app needs no change.</li>
+        <li>You must rebuild <code>b</code> to listen on another container port.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Inside, every container has its own network stack and its own localhost, so the same port is fine. Outside, a host port can be published only once. The mapping lives in the <code>-p</code> flag, so the app's own port never has to change (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> PID 1 and what the container sees</summary>
+    <div class="body"><p>40 processes run on the host. You run <code>docker run -d --name w nginx</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Inside the container, its main process is PID 1.</li>
+        <li><code>docker top w</code> on the host shows the same process with an ordinary host PID.</li>
+        <li>The mount namespace gives the container its own view of the filesystem tree.</li>
+        <li>cgroups are what hide the host's 40 processes from it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> One process has two numbers: PID 1 in its PID namespace, and some other PID on the host. Namespaces control what a process can <b>see</b> (PID, mount, network, hostname, user). cgroups control how much it can <b>use</b> (D is wrong).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Over the memory limit</summary>
+    <div class="body"><p><code>docker run -d --memory=256m --cpus=1 --name rep report:2.0</code>. A bug makes the report generator load a 2 GB file into memory. What is the most likely result?</p>
+      <ol type="A">
+        <li>The kernel may kill the process (an out-of-memory kill), and the container stops.</li>
+        <li>The process is throttled and keeps running slowly, like with a CPU limit.</li>
+        <li>Docker grows the limit to 2 GB automatically.</li>
+        <li>Other containers on the host are killed to make room.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> cgroups count and cap resources. Going over the CPU limit means throttling (slower, still running). Going over the memory limit means the kernel may kill the process (B is wrong). A limit is a ceiling, not a target (C). The limit keeps this container from hurting its neighbours (D). Neighbours still share the kernel, disk and network.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which steps rerun? (Python)</summary>
+    <div class="body"><pre class="term">FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]</pre>
+      <p>Since the last build on this machine, you added a package to <code>requirements.txt</code> and edited <code>app.py</code>. What rebuilds?</p>
+      <ol type="A">
+        <li><code>COPY requirements.txt .</code> and every step after it</li>
+        <li>Only <code>COPY . .</code> and after</li>
+        <li>Only <code>RUN pip install</code></li>
+        <li>Everything from <code>FROM</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> A changed input invalidates that step and every step after it. The first changed input is requirements.txt, so the install reruns, and <code>COPY . .</code> reruns too. FROM and WORKDIR come from the cache. B would be right if only app.py had changed.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Editing the README reinstalls everything</summary>
+    <div class="body"><pre class="term">FROM node:24-alpine
+WORKDIR /app
+COPY . .
+RUN npm ci --omit=dev
+CMD ["node", "server.js"]</pre>
+      <p>There is no <code>.dockerignore</code>. You fix a typo in <code>README.md</code> and rebuild. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>COPY . .</code> misses the cache, because README.md is part of its input.</li>
+        <li><code>npm ci</code> runs again.</li>
+        <li>Copying <code>package.json package-lock.json</code> first, then <code>npm ci</code>, then <code>COPY . .</code>, would let this rebuild reuse the install.</li>
+        <li>Docker decides by file modification time, so running <code>touch README.md</code> with no edit would also rerun the steps.</li>
+        <li>A <code>.dockerignore</code> with <code>node_modules</code>, <code>.git</code> and <code>.env</code> keeps those out of the build context.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, E.</b> Every file in the context feeds <code>COPY . .</code>, so any edit invalidates it and everything after it. Docker's cache for COPY compares file <b>contents</b> (checksums), not timestamps (D is wrong). Copy the dependency manifests first, so source-only edits skip the install.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> EXPOSE but no -p</summary>
+    <div class="body"><p>The Dockerfile has <code>EXPOSE 5000</code>. You run <code>docker run -d --name api api:1</code>. <code>docker ps</code> shows <code>PORTS 5000/tcp</code>. <code>curl localhost:5000</code> fails. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>EXPOSE only documents the port. Nothing was published.</li>
+        <li>Running again with <code>-p 5000:5000</code> fixes it.</li>
+        <li><code>5000/tcp</code> with no host address in docker ps means the port is published.</li>
+        <li><code>docker run -P</code> (capital P) would publish every EXPOSEd port to a random host port.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A published port looks like <code>0.0.0.0:5000-&gt;5000/tcp</code>. A bare <code>5000/tcp</code> means exposed, not published (C). <code>-p</code> creates the forwarding rule from the host into the container, and EXPOSE does not.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What went wrong: Flask in a container</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> docker run -d -p 8000:5000 --name web flaskapp:1
+<span class="p">$</span> docker logs web
+ * Running on http://127.0.0.1:5000
+<span class="p">$</span> curl localhost:8000
+curl: (56) Recv failure: Connection reset by peer</pre>
+      <p>The app calls <code>app.run()</code> with no arguments. What is the cause?</p>
+      <ol type="A">
+        <li>The server listens on the container's own loopback (127.0.0.1), so traffic from the published port never reaches it. Use <code>app.run(host="0.0.0.0")</code>.</li>
+        <li>The host port and the container port must be the same number.</li>
+        <li>The Dockerfile is missing <code>EXPOSE 8000</code>.</li>
+        <li>Port publishing does not work with <code>-d</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Flask's default host is 127.0.0.1. Inside a container that is the container's own localhost, while forwarded traffic arrives on the container's network address. Mapping 8000 to 5000 is fine (B). EXPOSE is documentation only (C). <code>-d</code> doesn't matter (D). You must rebuild the image and run a new container, because a restart reuses the old image.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Published to 127.0.0.1 only</summary>
+    <div class="body"><p><code>docker run -d -p 127.0.0.1:18080:3000 web:1</code>. The server inside listens on 0.0.0.0:3000. Your laptop's LAN address is 192.168.1.20. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>curl http://127.0.0.1:18080</code> on your laptop works.</li>
+        <li>A classmate on the same Wi-Fi can't reach <code>http://192.168.1.20:18080</code>.</li>
+        <li>Without the <code>127.0.0.1:</code> prefix, port 18080 would open on every network interface.</li>
+        <li><code>curl http://127.0.0.1:3000</code> on your laptop also works.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The address before the host port says where on the <b>host</b> the port opens, and 127.0.0.1 means this machine only. Container port 3000 was never published on the host (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> stop/start versus rm/run, with no volume</summary>
+    <div class="body"><p>The counter app writes <code>/data/count.txt</code> and no volume is mounted. You send 2 requests (count=2). Then: <code>docker stop c</code>, <code>docker start c</code>, one request. Then <code>docker rm -f c</code>, the same <code>docker run</code> again, one request. What two counts come back?</p>
+      <ol type="A"><li>3, then 1</li><li>1, then 1</li><li>3, then 4</li><li>3, then an error because /data is gone</li></ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Stop and start reuse the <b>same container and writable layer</b>, so the count continues to 3. <code>rm</code> deletes the container with its writable layer. A new run from the image starts with an empty layer, and the app creates <code>/data</code> again and counts 1. Only a volume (or a bind mount) would give 4.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> What went wrong: the volume didn't save the count</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> docker volume create t3data
+<span class="p">$</span> docker run -d --name c -p 8080:3000 -v t3data:/tmp counter:1.0
+<span class="p">$</span> curl localhost:8080      <span class="c"># count=1</span>
+<span class="p">$</span> curl localhost:8080      <span class="c"># count=2</span>
+<span class="p">$</span> docker rm -f c
+<span class="p">$</span> docker run -d --name c -p 8080:3000 -v t3data:/tmp counter:1.0
+<span class="p">$</span> curl localhost:8080      <span class="c"># count=1  ?!</span></pre>
+      <p>The app writes <code>/data/count.txt</code>. Why did the count reset?</p>
+      <ol type="A">
+        <li>The volume is mounted at /tmp, but the app writes to /data, which sits in the deleted writable layer.</li>
+        <li>Named volumes are deleted with <code>docker rm -f</code>.</li>
+        <li>You must run <code>docker volume create</code> again before each run.</li>
+        <li>Volumes only keep data after <code>docker stop</code>, not after <code>rm</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Only the path given after <code>:</code> lives in the volume. Mount it with <code>-v t3data:/data</code>. A named volume survives <code>docker rm -f</code> (B, D), and it is removed only by <code>docker volume rm</code>. C isn't needed: one create is enough, and <code>-v name:/path</code> even creates it if it is missing.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Bind mount versus named volume</summary>
+    <div class="body"><p>You run the counter with <code>--mount type=bind,src="$(pwd)"/data,dst=/data</code> and send 3 requests. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>./data/count.txt</code> on your laptop now contains 3.</li>
+        <li>After <code>docker rm -f</code> and a new run with the same mount, the next request gives count=4.</li>
+        <li><code>docker volume ls</code> lists this mount as a named volume.</li>
+        <li>A bind mount is useful when the host path itself matters, e.g. in development.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A bind mount maps a specific host folder into the container, so the file lives on your disk and survives the container. It is not Docker-managed storage, so it does not show in <code>docker volume ls</code> (C). A named volume is managed by Docker and is what you use for persistent application data.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Rebuilt, restarted, still old</summary>
+    <div class="body"><p><code>web</code> runs from <code>app:1</code>. You edit server.js, run <code>docker build -t app:1 .</code>, then <code>docker restart web</code>. The old behaviour is still there. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>A container stays tied to the image it was created from. A restart doesn't switch to the new build.</li>
+        <li>The fix is <code>docker rm -f web</code>, then <code>docker run</code> again with the same options.</li>
+        <li><code>docker restart</code> always pulls the newest image with that tag.</li>
+        <li>The build failed silently, because the tag already existed.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> The tag <code>app:1</code> now names the new image, but <code>web</code> was created from the old one and keeps it. Restart reuses the same container (C). Re-tagging is normal and doesn't fail (D). Any data in the old container's writable layer is lost on <code>rm</code> unless it lives in a volume.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Multi-stage build</summary>
+    <div class="body"><pre class="term">FROM node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY src ./src
+RUN npx tsc
+FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+CMD ["node", "dist/server.js"]</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The final image has no TypeScript compiler and no <code>src/</code>.</li>
+        <li><code>COPY --from=build</code> carries only the compiled output across.</li>
+        <li>Fewer tools in the production image means less attack surface.</li>
+        <li>The final image also contains every layer of the build stage.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The image is built from the <b>last</b> stage only. Earlier stages are just a place to compile. Dev dependencies, compilers and source add size and risk with no benefit when the app runs (D is wrong).</p></details>
+    </div></details>
+
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-migrations">Database migrations (T3L2)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Rename with auto-sync on</summary>
+    <div class="body"><p>A TypeORM app has <code>synchronize: true</code>. You rename the entity field <code>bio</code> to <code>about</code> and restart production, where 300,000 users have a bio. What happens?</p>
+      <ol type="A">
+        <li>The column is renamed in place and the data is kept.</li>
+        <li>The <code>bio</code> column is dropped and a new, empty <code>about</code> column is added.</li>
+        <li>The app refuses to start until you confirm the rename.</li>
+        <li>Nothing changes until you run a migration.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> Auto-sync compares two snapshots: the code says <code>about</code>, the database has <code>bio</code>, so it makes them match by dropping one column and adding the other. It has no way of knowing you meant the same column. Auto-sync (and <code>prisma db push</code>) is fine for local prototyping. Production needs versioned, reviewed migrations (<code>prisma migrate deploy</code>, <code>flyway migrate</code>).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What the runner applies</summary>
+    <div class="body"><pre class="term">migrations/                 history table
+01_create_users.sql          01  2026-09-02
+02_add_billing.sql           02  2026-09-09
+03_add_full_name.sql
+04_add_index.sql</pre>
+      <p>You run the migration runner. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>It runs 03, then 04, in that order.</li>
+        <li>It adds one history row for each migration that succeeds.</li>
+        <li>It runs all four files again, to be safe.</li>
+        <li>A second run straight after does nothing ("schema is up to date").</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> The runner reads the history table, lists the files, and runs only the ones with no history row, in version order. Each one is followed by its own history row. Applied migrations never run again (C). Saving a file changes nothing until a runner executes it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> You fixed a typo in an applied migration</summary>
+    <div class="body"><pre class="term">ERROR: Validate failed: Migrations have failed validation
+Migration checksum mismatch for migration version 02
+-&gt; Applied to database : 1993450877
+-&gt; Resolved locally    : 1305205389</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Someone edited <code>02</code> after it was applied, so its checksum no longer matches the history.</li>
+        <li>The deploy stopped before running any migration.</li>
+        <li>The right fix is to put 02 back as it was and make the change in a new migration (03, or a timestamp).</li>
+        <li><code>flyway repair</code> would apply the edited SQL of 02 to the database.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> The history is append-only and checksum-verified, so an applied migration must never change. Fix things with the next migration. <code>repair</code> only rewrites the stored checksum (and removes failed rows). It runs no SQL, so the edit would never reach this database (D), and databases that ran the old 02 would quietly differ.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What went wrong: a hotfix by hand</summary>
+    <div class="body"><p>During an incident, someone ran <code>CREATE INDEX idx_orders_user ON orders (user_id);</code> by hand in psql on production. A week later, migration <code>07_index_orders.sql</code> (the same statement) is deployed and the runner fails with <code>relation "idx_orders_user" already exists</code>. Why did the runner run 07?</p>
+      <ol type="A">
+        <li>SQL run by hand changes the schema but writes no history row, so 07 still looked pending.</li>
+        <li>The runner always re-runs the newest migration.</li>
+        <li>The checksum of 07 changed.</li>
+        <li>psql changes are undone when the session closes, so the index was gone.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> The runner knows only what is in its history table. The index really exists (D is wrong, because psql autocommits), but there is no row for 07. Options: drop the hand-made index and let the migration create it, or record 07 as applied without running it (Flyway: <code>-skipExecutingMigrations=true -target=07</code>). B and C describe nothing that happened.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Runner killed before COMMIT</summary>
+    <div class="body"><pre class="term">BEGIN;
+ALTER TABLE users ADD COLUMN full_name text;      -- ok
+INSERT INTO migration_history (version) VALUES ('03');  -- ok
+-- process killed here; COMMIT never sent</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>On PostgreSQL, the ALTER and the history row are both rolled back, because DDL is transactional there.</li>
+        <li>The next run executes 03 again from the start, and it succeeds.</li>
+        <li>The next run skips 03, because its history row was inserted.</li>
+        <li>On a database where DDL commits implicitly (e.g. MySQL), the column could exist without a history row, and the next run would fail.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Uncommitted work vanishes when the session dies: the INSERT was never committed, so it doesn't count (C). How DDL behaves in transactions depends on the database, which is why the lecture warns about it. MySQL commits around each DDL statement, so you can end up with a column and no row.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> COMMIT after an error</summary>
+    <div class="body"><pre class="term">BEGIN;
+ALTER TABLE users ADD COLUMN plan text;
+UPDATE users SET plan = tier;      -- ERROR: column "tier" does not exist
+COMMIT;</pre>
+      <p>In psql on PostgreSQL, what is the state afterwards?</p>
+      <ol type="A">
+        <li>No <code>plan</code> column: the failed transaction is rolled back, even though you typed COMMIT.</li>
+        <li>The <code>plan</code> column exists, filled with NULL.</li>
+        <li>The <code>plan</code> column exists and is filled from <code>tier</code>.</li>
+        <li>The transaction stays open until you type ROLLBACK.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> After an error, the transaction is aborted and ignores further commands. A COMMIT on an aborted transaction ends it with a rollback (psql prints <code>ROLLBACK</code>). B is what you get <b>without</b> BEGIN: each statement autocommits, so the ALTER stays even though the UPDATE failed. The transaction boundary decides what commits together.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> lock_timeout and the queue</summary>
+    <div class="body"><pre class="term">A: BEGIN; SELECT count(*) FROM orders;        -- finished, transaction left open
+B: SET lock_timeout = '2s';
+   ALTER TABLE orders ADD COLUMN note text;
+C: SELECT * FROM orders WHERE id = 7;         -- sent after B
+D: SELECT * FROM customers WHERE id = 1;</pre>
+      <p>PostgreSQL 16. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>B waits for ACCESS EXCLUSIVE, because A still holds ACCESS SHARE on orders.</li>
+        <li>C waits behind B while B is queued, even though A and C only read.</li>
+        <li>After about 2 seconds B fails with "canceling statement due to lock timeout", and C then returns its row.</li>
+        <li>D also waits, because the whole database is locked.</li>
+        <li>lock_timeout also limits how long the ALTER may run once it has the lock.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> A table lock is held until the transaction ends, not just until the query finishes. C's ACCESS SHARE would be compatible with A, but it queues behind B's earlier, conflicting request. When B gives up, C can share with A. Only sessions using <code>orders</code> are affected (D). lock_timeout limits only the <b>wait</b> to get the lock (E).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Which ADD COLUMN rewrites the table?</summary>
+    <div class="body"><p>PostgreSQL 16, 40 million rows in <code>events</code>. Which statements rewrite every row? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>ALTER TABLE events ADD COLUMN note text;</code></li>
+        <li><code>ALTER TABLE events ADD COLUMN plan text DEFAULT 'free';</code></li>
+        <li><code>ALTER TABLE events ADD COLUMN seen_at timestamptz DEFAULT clock_timestamp();</code></li>
+        <li><code>ALTER TABLE events ADD COLUMN ref uuid DEFAULT gen_random_uuid();</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C, D.</b> Since PostgreSQL 11, a constant (non-volatile) default is stored in the catalogue, so A and B take milliseconds. A <b>volatile</b> default must give each row its own value, so every row is rewritten, which means a long ACCESS EXCLUSIVE lock. Even the fast ones still need that lock briefly, so they can queue behind a long reader.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Down migration after a week of writes</summary>
+    <div class="body"><pre class="term">-- 12.up.sql
+ALTER TABLE users ADD COLUMN phone text;
+-- 12.down.sql
+ALTER TABLE users DROP COLUMN phone;</pre>
+      <p>12 ran in production a week ago, and 50,000 users have entered a phone number. You run <code>12.down.sql</code>, then later <code>12.up.sql</code> again. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>After the down, the column and every phone number are gone.</li>
+        <li>After the up runs again, <code>phone</code> is NULL for every row.</li>
+        <li>A <code>ROLLBACK</code> could have undone the down, after it committed.</li>
+        <li>Getting the numbers back needs a backup (restore).</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A reverse migration is new SQL that runs after the earlier change committed. It can't bring back values that nothing saved. ROLLBACK only discards <b>uncommitted</b> changes (C). Code is reversible. Data often isn't.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Adding a NOT NULL column to a full table</summary>
+    <div class="body"><p><code>orders</code> on PostgreSQL has 3 rows. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>ALTER TABLE orders ADD COLUMN currency text NOT NULL;</code> fails, because the existing rows would hold NULL.</li>
+        <li><code>ALTER TABLE orders ADD COLUMN currency text NOT NULL DEFAULT 'INR';</code> succeeds, and the existing rows read 'INR'.</li>
+        <li>The first statement would succeed on an empty table.</li>
+        <li>The safe, no-downtime way for a live app is: add the column as nullable, have new writes supply it, backfill in batches, then enforce NOT NULL.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, D.</b> All four are true. Postgres says <code>column "currency" ... contains null values</code> for A. A constant default fills old rows (fast on PG 11+). With no rows there is nothing to violate. D is the lecture's required-column pattern. It is the safe way when the right value differs per row, or when old code is still writing rows without the column.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Order the required-column steps</summary>
+    <div class="body"><p>You must make <code>orders.currency</code> required on a large live table with no downtime. Which order is right?</p>
+      <ol type="A">
+        <li>Add nullable column, then deploy code that writes currency, then backfill in batches, then <code>ADD CONSTRAINT ... CHECK (currency IS NOT NULL) NOT VALID</code>, then <code>VALIDATE CONSTRAINT</code>, then <code>SET NOT NULL</code>, then drop the check</li>
+        <li>Add nullable column, then backfill, then deploy code that writes currency, then <code>SET NOT NULL</code></li>
+        <li><code>SET NOT NULL</code> first, then backfill, then deploy code</li>
+        <li>Add the CHECK constraint (validated at once), then add the column, then backfill</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> New writes must supply the value <b>before</b> the backfill, or old code keeps creating NULLs after it (B). <code>NOT VALID</code> checks new rows only. <code>VALIDATE</code> checks old rows while reads and writes continue. On PG 12+, the validated check lets <code>SET NOT NULL</code> skip the full scan, taking ACCESS EXCLUSIVE only briefly. C fails while NULLs exist. D refers to a column that doesn't exist yet.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Expand/contract: where it becomes irreversible</summary>
+    <div class="body"><p>Renaming <code>user_name</code> to <code>full_name</code> during rolling deploys: 1 expand (add full_name, write both), 2 backfill, 3 transition (read full_name, still write both), 4 contract (drop user_name). Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Up to and including step 3, redeploying the previous app version is safe, because user_name is still current.</li>
+        <li>Step 4 is where the change stops being a simple redeploy-to-undo: old code can no longer use user_name.</li>
+        <li>A single <code>RENAME COLUMN</code> is fine, because the old instances restart within a minute.</li>
+        <li>The backfill is a job, not a migration, so it gets no history row.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Because both columns are written until the end, every earlier step can be rolled back by redeploying the old code. After the drop, old code breaks, and a down migration would only re-add an empty column. A direct rename (C) breaks every old instance still running during the rollout.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Two branches, the same migration number</summary>
+    <div class="body"><p>Asha's branch adds <code>05_add_coupons.sql</code>. Ravi's branch adds <code>05_add_search_index.sql</code>. Both pull requests are approved and merged. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Git merges both without a conflict, because the file names differ.</li>
+        <li>The migration tool refuses (Flyway: "Found more than one migration with version 05").</li>
+        <li>The runner runs them in alphabetical order, so nothing goes wrong.</li>
+        <li>Timestamp versions (e.g. <code>202610271015_add_search_index.sql</code>) avoid this without coordination.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> The collision shows up in the tool, not in git. A version must be unique, so two 05s are an error, not something to sort (C). Timestamps are unique without any coordination and sort by when they were written. Fix it on <b>your</b> branch and never renumber a migration that is already applied on main.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> The wrong tab at 14:05</summary>
+    <div class="body"><p>A nightly <code>pg_dump</code> runs at 02:00. At 14:05 someone runs <code>DROP TABLE orders;</code> on the production primary. A streaming replica is attached. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Restoring only the 02:00 dump loses about 12 hours of writes.</li>
+        <li>WAL can't be replayed onto a logical dump (pg_dump).</li>
+        <li>Point-in-time recovery to 14:04:59 needs a physical base backup plus WAL archived continuously since that backup.</li>
+        <li>The replica saves you, because it still has the table.</li>
+        <li>RPO is the maximum acceptable data loss, and RTO is the maximum acceptable recovery time.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, E.</b> Replication is not a backup: the replica copied the DROP within moments (D). WAL replay works only on a physical base backup, and only if WAL archiving was configured. You only know your real RTO once you have done a restore and timed it.</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-architecture">Architecture and the stack decision (T4L1)</h3>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A call that timed out</summary>
+    <div class="body"><p>Checkout calls the Inventory service over HTTP: <code>reserve(item=42, qty=1)</code>. After 3 seconds it times out. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Checkout can't tell whether the reservation ran and the reply was lost, or never ran at all.</li>
+        <li>Retrying is safe only if running the call twice has the same effect as running it once.</li>
+        <li>A timeout means the request was not processed, so retrying is always safe.</li>
+        <li>You can't step through both services with one local debugger the way you can with a function call.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> A network call is a function call that can fail halfway, silently, on someone else's clock. That is partial failure. A timeout tells you nothing about what happened on the other side (C), which is why idempotency matters.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which operations are safe to retry?</summary>
+    <div class="body"><p>Which of these give the same end state when run twice? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>UPDATE orders SET status = 'shipped' WHERE id = 5;</code></li>
+        <li><code>UPDATE wallets SET balance = balance - 100 WHERE user_id = 9;</code></li>
+        <li><code>DELETE FROM carts WHERE id = 31;</code></li>
+        <li><code>INSERT INTO payments (order_id, amount) VALUES (5, 499);</code> with no unique key</li>
+        <li><code>INSERT ... (idempotency_key, ...)</code> where <code>idempotency_key</code> is UNIQUE and a duplicate is treated as "already done"</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, C, E.</b> Setting a value, or deleting a specific row, ends in the same state however many times it runs. A relative update (B) takes the money twice, and a plain insert (D) records two payments. An idempotency key sent with every retry lets the server act once per key.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> The eight fallacies</summary>
+    <div class="body"><p>Which are among the eight fallacies of distributed computing? Choose all that apply.</p>
+      <ol type="A">
+        <li>The network is reliable</li>
+        <li>Latency is zero</li>
+        <li>Transport cost is zero</li>
+        <li>The database is always consistent</li>
+        <li>There is one administrator</li>
+        <li>CPU is infinite</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, E.</b> The full eight are: the network is reliable, latency is zero, bandwidth is infinite, the network is secure, topology doesn't change, there is one administrator, transport cost is zero, the network is homogeneous. D and F are made up. They sound plausible, but they are not about the network.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which stack for an early product?</summary>
+    <div class="body"><p>Five students are building a university hostel-booking portal. Time to market matters, the data is relational, and traffic is modest. Which choice matches the lecture?</p>
+      <ol type="A">
+        <li>A (modular) monolith on one framework, with a managed relational database and PaaS hosting</li>
+        <li>Six microservices on Kubernetes, each with its own database, behind an API gateway</li>
+        <li>Serverless functions joined by a cloud workflow orchestrator</li>
+        <li>Microservices now, so the team doesn't have to rewrite later</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> For a small team at an early stage, a monolith removes network overhead and orchestration cost, and it is the fastest path to a safe first release. B and D pay the distributed-systems tax before any measured pain exists ("Monolith First"). C adds orchestration and per-call cost that a simple app doesn't need.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Why Prime Video saved 90%</summary>
+    <div class="body"><p>Which statements explain the Prime Video monitoring case? Choose all that apply.</p>
+      <ol type="A">
+        <li>The serverless pipeline was billed per state transition in the orchestration workflow.</li>
+        <li>Heavy video frames were passed through S3 between every step, which made an I/O bottleneck.</li>
+        <li>Moving to one process (on EC2/ECS) passed the data in memory instead.</li>
+        <li>The lesson is that microservices are always wrong.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Sending large data across a network between services or functions is expensive and slow. One memory space removes that cost. The lesson is about fit, not religion (D): "Building evolvable software systems is a strategy, not a religion."</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> When to extract Dispatch</summary>
+    <div class="body"><p>The campus food app is a modular monolith with Ordering, Dispatch and Vendor Ops. Which observations would justify extracting Dispatch into its own service? Choose all that apply.</p>
+      <ol type="A">
+        <li>Measured: rider matching needs very different hardware and scales separately from everything else.</li>
+        <li>Engineering has grown past ~50 people, and teams keep blocking each other's deploys.</li>
+        <li>"Dispatch" is a distinct word in the code.</li>
+        <li>Dispatch already lives in its own folder.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> Split when the pain is <b>measured</b>, not guessed, such as team size or very different scaling needs. A name (C) or a folder (D) doesn't create a need to distribute. An enforced module boundary is the seam that makes a later extraction possible without a rewrite.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> One word, three meanings</summary>
+    <div class="body"><p>"Order" means cart and payment status in Ordering, pickup and rider ETA in Dispatch, and a kitchen ticket in Vendor Ops. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Each is a bounded context: inside it, "Order" has one precise meaning.</li>
+        <li>Each module can keep its own order-like record.</li>
+        <li>One shared, mutable <code>Order</code> object used everywhere is the cleanest design.</li>
+        <li>The contexts should integrate through public APIs and events such as <code>OrderPlaced</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> All three definitions are correct inside their own boundary. Sharing one giant object (C) couples every team to every other team's rules. A context map shows how the contexts relate, and arrows go only through APIs and events, never through a shared table.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Is it a module?</summary>
+    <div class="body"><p>Which observations make something a <b>strong</b> module candidate? Choose all that apply.</p>
+      <ol type="A">
+        <li>It has its own business rules, changes for its own reasons, and keeps its data private.</li>
+        <li>"Coupon" is a unique noun in the codebase.</li>
+        <li>Two features happen to share a database table today.</li>
+        <li>You can state its responsibility and public contract in one or two sentences.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D.</b> The five tests are responsibility, language, rules, data and contract. A unique keyword is only a clue (B): "Coupon" may just be a pricing rule inside Ordering. Table design must not decide module boundaries (C).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> CI says "dependency violation"</summary>
+    <div class="body"><pre class="term"><span class="p">$</span> bundle exec packwerk check
+✗ billing/app/services/invoice_builder.rb
+Dependency violation: billing → user
+`User.find(id).email` — not in user's public API
+⚠ 1 violation — build failed</pre>
+      <p>Which responses are right? Choose all that apply.</p>
+      <ol type="A">
+        <li>Get the email through the User module's public API (or an event), not its internals.</li>
+        <li>This check is what stops the monolith from relapsing into a big ball of mud.</li>
+        <li>Turn the check off: everything runs in one process anyway.</li>
+        <li>Move Billing into its own microservice to fix the violation.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> In a modular monolith, modules talk only through explicit public APIs, and the boundary is enforced <b>mechanically in CI</b>, not by good intentions. Disabling the check (C) lets the boundary wear away. Distribution (D) is a separate decision that needs measured pain, and it doesn't fix the coupling.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Monolith, modular monolith, microservices</summary>
+    <div class="body"><p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>A modular monolith keeps ACID transactions easy, because it has one database and one process.</li>
+        <li>A modular monolith is still a single deployable.</li>
+        <li>Microservices pay network overhead on every call that crosses a boundary.</li>
+        <li>A modular monolith's team autonomy comes from separate deployments.</li>
+        <li>Conway's Law: a system's structure tends to copy the communication structure of the organisation that builds it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C, E.</b> A modular monolith's autonomy comes from enforced <b>boundaries</b>, not separate deploys (D). Microservices apply Conway's Law in reverse: you shape services so that teams can move fast. A mature plain monolith's biggest risk is one team's change silently breaking another team's feature.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Serverless meets Postgres on launch day</summary>
+    <div class="body"><p>Each serverless invocation opens its own Postgres connection. A launch brings 800 concurrent invocations, and the server's connection limit is 100. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>New invocations start failing with "too many connections" errors, even though the CPU is idle.</li>
+        <li>A connection pooler in front of the database lets many invocations share a few real connections.</li>
+        <li>The CAP theorem is the constraint that matters here.</li>
+        <li>Adding more serverless instances fixes it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> One connection per invocation against a hard server limit is why serverless compute and relational databases work badly together. The database, not the application, fails first. With a single-primary relational database, CAP is not yet the relevant constraint (C). More instances means more connections, which makes it worse (D).</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-earlier">Review of earlier lectures: runtime, config, secrets and AI workflow (T0/T1)</h3>
+  <p>These lectures were in quiz 1A, not 2A. Their ideas still show up inside later questions (ports, lockfiles, secrets in history), so here is a short set.</p>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Prove .env was never committed</summary>
+    <div class="body"><p><code>.env</code> is listed in <code>.gitignore</code>. You want proof that it was never committed on any branch. Which command shows that (empty output = never)?</p>
+      <ol type="A">
+        <li><code>git log --all --full-history -- .env</code></li>
+        <li><code>cat .gitignore</code></li>
+        <li><code>git status</code></li>
+        <li><code>ls -a</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> It searches every branch's history for commits that touched <code>.env</code>. .gitignore only stops <b>untracked</b> files being added. It says nothing about the past (B). <code>git status</code> describes only the present (C). If a secret was ever pushed, rotate it, because deleting the file doesn't remove it from history, forks or clones.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Configuration as input</summary>
+    <div class="body"><p>Which statements match the twelve-factor rule "store config in the environment"? Choose all that apply.</p>
+      <ol type="A">
+        <li>One build can run in dev, staging and production with different <code>DATABASE_URL</code> values.</li>
+        <li>Changing the database URL means changing a variable and restarting, not rebuilding.</li>
+        <li>A committed <code>.env.example</code> with safe defaults documents each variable.</li>
+        <li>Production passwords belong in a committed <code>config.js</code> so every teammate has them.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, C.</b> Config compiled into code is a constant that is true in exactly one place. An environment variable is read fresh each time the process starts. D is the classic leak: scanners find committed credentials within minutes.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Connection refused</summary>
+    <div class="body"><p>On a server, nothing has bound port 5432. An attacker scans that port. What do they see?</p>
+      <ol type="A"><li>Connection refused: nothing is listening</li><li>A Postgres login prompt</li><li>A crash log with the Postgres version</li><li>A timeout, every time</li></ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> A port is only "open" when a process has a listening socket bound to it. With no listener, the OS refuses the connection. (A firewall that silently drops packets would make it look like a timeout instead. That is a different setup from "nothing is listening".)</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A good CLAUDE.md rule</summary>
+    <div class="body"><p>Which lines belong in a committed CLAUDE.md or AGENTS.md? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>pytest -q</code> (the exact test command)</li>
+        <li>"Never run db:push. Edits to schema.py must generate a migration."</li>
+        <li>"Please try to be careful with the database."</li>
+        <li><code>STRIPE_KEY=sk-live-...</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B.</b> The file is operational ground truth: exact commands, a directory map, and hard rules. Concrete negative constraints ("never", "must") get obeyed, while vague suggestions get skimmed (C). Secrets never go in a file the agent or the repo can read (D).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> The deny rule that didn't protect .env</summary>
+    <div class="body"><p><code>.claude/settings.json</code> denies <code>Read(**/.env*)</code>. The agent still printed your <code>.env</code>. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>A Read deny rule blocks the Read tool, not <code>Bash("cat .env")</code>.</li>
+        <li>Real protection denies both doors, or runs Bash in an OS-level sandbox that can't see the path.</li>
+        <li>The deny rule must be in <code>settings.local.json</code> to work.</li>
+        <li>If a secret sits in a file the agent can open, assume it will be read.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> The same file can be reached through a different tool. Shared deny rules belong in the committed <code>.claude/settings.json</code>, while <code>settings.local.json</code> is for personal preferences (C is wrong).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Context rot</summary>
+    <div class="body"><p>You are 70 turns into a chat, and the agent is ignoring a rule from turn 3. Which actions match the lecture? Choose all that apply.</p>
+      <ol type="A">
+        <li>Start a fresh session from SPEC.md, TASKS.md and CLAUDE.md.</li>
+        <li>Let an explore subagent read the codebase and return only a summary.</li>
+        <li>Switch to a model with a bigger context window, so nothing gets dropped.</li>
+        <li>Validate the output (grep, tests) instead of trusting it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D.</b> Attention cost grows with n², and reliability drops as the context fills. The fix is a shorter, cleaner context, not a bigger one (C). A bigger window gives more room, but it doesn't move the point where quality starts to drop.</p></details>
+    </div></details>
+
+  <!-- ===================================================== -->
+  <h3 class="sub" id="theory-facts">Rapid-fire facts</h3>
+  <p>Read these the night before and again just before the quiz. Each one has decided a multiple-choice option before.</p>
+
+  <div class="cheat"><h3>Git internals and history</h3><ul>
+    <li>Git = a DAG of content-addressed objects: <code>blob</code>, <code>tree</code>, <code>commit</code>, <code>tag</code></li>
+    <li>Object id = hash of its content. Change 1 byte and you get a new object with a new id</li>
+    <li>A blob has no name. The <b>tree</b> holds names and modes</li>
+    <li>A commit = tree + parent(s) + author/committer + message. It is a snapshot, not a diff</li>
+    <li>A branch = a small file holding one hash. Committing overwrites only that file</li>
+    <li>Change one commit and it and <b>every later commit</b> get new IDs</li>
+    <li>Amend or rebase = new commits. The old ones stay (reflog) until gc's grace period</li>
+    <li>Myers = shortest edit script, O((m+n)·d) time, O(m+n) memory, git's default</li>
+    <li>On a tie, Myers prefers <b>delete</b> over insert</li>
+    <li>3-way merge = diff(base,ours) + diff(base,theirs). Same region on both sides = conflict</li>
+    <li>Merge = accurate ledger (2-parent commit). Rebase = readable story (new hashes, straight line)</li>
+    <li>Squash = rebase with the commits collapsed into one</li>
+    <li>Rebase moves only the branch you're on. main stays put</li>
+    <li><code>git branch -d</code> refuses unmerged work. <code>-D</code> forces it</li>
+  </ul></div>
+
+  <div class="cheat"><h3>Remotes, undo and recovery</h3><ul>
+    <li>Four locations: working dir, staging, local repo, remote</li>
+    <li><code>git status</code> never contacts the remote. "ahead/behind" uses the last fetch</li>
+    <li><code>fetch</code> = download + move origin/main only. <code>pull</code> = fetch + integrate</li>
+    <li>Diverged + plain <code>git pull</code> = "Need to specify how to reconcile". Use <code>--no-rebase</code> or <code>--rebase</code></li>
+    <li>Rejected push: integrate first. Never <code>--force</code> on shared main</li>
+    <li><code>restore f</code> = staged copy goes to the working dir. <code>restore --staged f</code> = unstage</li>
+    <li><code>reset --soft</code> keeps staged, <code>--mixed</code> keeps files, <code>--hard</code> discards</li>
+    <li>Pushed bad commit: <code>git revert</code> (adds an undo commit)</li>
+    <li>Lost commit: <code>git reflog</code>, then <code>git branch name &lt;hash&gt;</code></li>
+    <li>After switching away, <code>HEAD@{1}</code> = where HEAD was just before</li>
+    <li>Rebased your own pushed branch: <code>push --force-with-lease</code></li>
+    <li><code>commit -a</code> skips untracked files. <code>stash</code> skips untracked unless <code>-u</code></li>
+    <li>.gitignore ignores only untracked files. Use <code>git rm --cached</code> to stop tracking</li>
+  </ul></div>
+
+  <div class="cheat"><h3>Testing and CI</h3><ul>
+    <li>Arrange, Act, Assert. No assertion = no behavioural check</li>
+    <li>pytest passes a test with no assert if it doesn't raise</li>
+    <li>Cases: normal, boundary (just below and exactly on), invalid/missing, error</li>
+    <li>Unit = pure logic. Integration = real components + DB. E2E = browser journey</li>
+    <li>Pyramid: many unit, some integration, few E2E. It is a budget, not a law</li>
+    <li>Coverage = lines/branches/functions <b>executed</b>, not asserted</li>
+    <li>Mutation testing: a surviving mutant means the tests can't tell the change apart</li>
+    <li>Stub = canned value. Fake = working simplified version. Mock = records calls</li>
+    <li>Tests must be independent, clean up after themselves, and be deterministic (no uncontrolled clock or network)</li>
+    <li>Bug fix = commit 1 failing test (red), commit 2 fix (green)</li>
+    <li>CI = validate, build, test, report status on a change. CD = deliver/deploy</li>
+    <li>A failing step fails the job, and later steps are skipped</li>
+    <li><code>continue-on-error: true</code> lets the job pass anyway</li>
+    <li>Gate = <code>pull_request</code> trigger + <b>required status check</b> in branch protection</li>
+    <li>Clean runner = only declared dependencies. Read the <b>first</b> meaningful error</li>
+  </ul></div>
+
+  <div class="cheat"><h3>Containers and Docker</h3><ul>
+    <li>Container = isolated process(es) on the <b>shared host kernel</b>. A VM has its own kernel</li>
+    <li>Namespaces = what you <b>see</b> (PID, mount, net, hostname, user)</li>
+    <li>cgroups = how much you <b>use</b>: over CPU = throttled, over memory = may be killed</li>
+    <li>Main process is PID 1 inside, with a different PID on the host</li>
+    <li>Image layers are read-only and shared (copy-on-write). Each container has its own writable layer</li>
+    <li>A changed input invalidates that step <b>and all steps after it</b></li>
+    <li>Copy manifests, then install, then copy source. CMD only records metadata</li>
+    <li>COPY cache uses file contents, not timestamps. <code>.dockerignore</code> trims the context</li>
+    <li><code>npm ci</code> installs exactly the lockfile and fails on a mismatch</li>
+    <li><code>EXPOSE</code> documents only. <code>-p host:container</code> publishes</li>
+    <li><code>-p 127.0.0.1:8080:3000</code> = this machine only. Without the prefix = all interfaces</li>
+    <li>Server inside must listen on <code>0.0.0.0</code>, not 127.0.0.1</li>
+    <li>stop/start keeps the writable layer. rm deletes it</li>
+    <li>A named volume outlives containers. Only the mounted path is kept</li>
+    <li>New image = new container (rm + run). restart reuses the old image</li>
+  </ul></div>
+
+  <div class="cheat"><h3>Database migrations</h3><ul>
+    <li>Code, schema and data change independently. Code is reversible, data often isn't</li>
+    <li>Auto-sync rename = drop + add an empty column. Prototype only</li>
+    <li>Runner: read history, run pending files in order, insert a history row, COMMIT</li>
+    <li>History = append-only, ordered, checksum-verified</li>
+    <li>Edited applied file = checksum mismatch, deploy stops before running anything</li>
+    <li><code>flyway repair</code> fixes checksums and runs <b>no</b> SQL</li>
+    <li>Hand-run SQL = schema changed, no history row, migration still pending</li>
+    <li>Postgres DDL is transactional. Killed before COMMIT = it reruns cleanly</li>
+    <li>Error inside BEGIN: transaction aborted. COMMIT then rolls back</li>
+    <li>Without BEGIN each statement autocommits</li>
+    <li>ADD COLUMN needs ACCESS EXCLUSIVE. It waits for open readers, and later readers queue behind it</li>
+    <li>Locks are held until the <b>transaction</b> ends. <code>lock_timeout</code> limits only the wait</li>
+    <li>PG 11+: constant default = fast. Volatile default (<code>clock_timestamp()</code>, <code>gen_random_uuid()</code>) = full rewrite</li>
+    <li>Down migration can't restore deleted values, only a backup can</li>
+    <li>Expand, backfill, transition, contract. Irreversible at contract (drop)</li>
+    <li>Required column: nullable, writes supply it, batched backfill, CHECK NOT VALID, VALIDATE, SET NOT NULL</li>
+    <li>Use timestamp versions so two branches don't collide</li>
+    <li>PITR = physical base backup + archived WAL. A replica is not a backup. RPO = data loss, RTO = time</li>
+  </ul></div>
+
+  <div class="cheat"><h3>Architecture</h3><ul>
+    <li>Network call costs: partial failure, retries plus idempotency, distributed transactions, no debugger</li>
+    <li>Timeout = unknown outcome. Retry only idempotent calls, and send an idempotency key</li>
+    <li>8 fallacies: reliable, zero latency, infinite bandwidth, secure, fixed topology, one admin, zero transport cost, homogeneous</li>
+    <li>Conway's Law: systems copy org communication. Microservices apply it in reverse</li>
+    <li>Monolith First: split only on measured pain (~50+ engineers, very different scaling)</li>
+    <li>Modular monolith = one deployable, enforced boundaries, ACID easy, no network tax</li>
+    <li>Modules talk via public APIs/events, never another module's tables</li>
+    <li>Boundary enforced in CI (Packwerk), not by comments</li>
+    <li>DDD: ubiquitous language, bounded context, context map</li>
+    <li>Five module tests: responsibility, language, rules, data, contract</li>
+    <li>A unique noun or a shared table does not make a module</li>
+    <li>Prime Video: per-transition billing + S3 relay, fixed by one process with in-memory transfer</li>
+    <li>Serverless + Postgres: one connection per invocation exhausts the limit. Use pooling</li>
+  </ul></div>
+</section>

@@ -326,6 +326,39 @@ bc59506 HEAD@{1}: commit: Add rate limit config
 <span class="p">$</span> git reset --hard 9f8e7d6            <span class="c"># or: git reset --hard HEAD@{1}</span></pre><p>Commits are never deleted by reset; only the pointer moved. The reflog shows the old position. (Uncommitted edits lost by the first <code>--hard</code> can't be recovered this way.)</p></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: read ahead/behind, then the two-dot logs</summary>
+    <div class="body"><p>After <code>git fetch</code>, status says: "Your branch and 'origin/main' have diverged, and have 2 and 1 different commits each". (a) Which command lists the commits you would be pushing? (b) Which lists the commits you are missing? (c) How many lines does each print? (d) Team rule: linear history. Which two commands get your work onto origin?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git log --oneline origin/main..main   <span class="c"># (a) yours, not on origin: 2 lines</span>
+<span class="p">$</span> git log --oneline main..origin/main   <span class="c"># (b) theirs, not in main: 1 line</span>
+<span class="p">$</span> git rebase origin/main                 <span class="c"># (d) or: git pull --rebase</span>
+<span class="p">$</span> git push</pre><p><code>A..B</code> = "reachable from B, not from A". The first number in "2 and 1" is always <b>your</b> side. After the rebase status says "ahead by 2", and the push is a fast-forward.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: undo a whole merged feature that's pushed</summary>
+    <div class="body"><p>main: "Add app" → "Add README" → <code>Merge branch 'discount'</code> (brought discount.py + a change to app.py) → "Add logging config". All pushed, teammates pulled. Take the whole discount feature out with <b>one</b> new commit. What happens with a plain <code>git revert &lt;merge&gt;</code>, and what's the right command? What does the wrong parent number do?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git revert 2ceabd1
+error: commit 2ceabd1... is a merge but no -m option was given.
+<span class="p">$</span> git revert -m 1 --no-edit 2ceabd1    <span class="c"># parent 1 = main side = keep it</span>
+<span class="p">$</span> git push</pre><p>A merge has two parents; <code>-m 1</code> says "main line is parent 1, undo what parent 2 (the feature) brought in". <code>-m 2</code> does the opposite: keeps discount and removes "Add README". Reverting the two feature commits one by one also works but makes 2 commits. To bring the feature back later: revert the revert (merging the branch again does nothing).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Unseen: the rebase stops on a conflict</summary>
+    <div class="body"><p>You run <code>git rebase origin/main</code> with 3 local commits. It prints <code>CONFLICT (content): Merge conflict in routes.txt</code> and "Could not apply b2c3d4e... Add search". (a) Which branch are you on now? (b) What are your two ways forward? (c) Inside the conflict markers, which side is <code>HEAD</code>?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git status
+interactive rebase in progress; onto 9f8e7d6
+You are currently rebasing branch 'main' on '9f8e7d6'.
+<span class="p">$</span> code routes.txt                 <span class="c"># remove &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;, keep both lines</span>
+<span class="p">$</span> git add routes.txt
+<span class="p">$</span> git rebase --continue           <span class="c"># editor opens for the message: save + close</span>
+<span class="c"># or give up completely:</span>
+<span class="p">$</span> git rebase --abort              <span class="c"># main back exactly as before the rebase</span></pre><p>(a) No branch: HEAD is detached while the rebase replays commits; main moves only at the end. (b) fix + <code>git add</code> + <code>--continue</code> (repeat for each commit that conflicts), or <code>--abort</code>. (c) During a rebase <code>HEAD</code> = the commit you are replaying <b>onto</b> (origin's side); the bottom part is <b>your</b> commit. That's the reverse of a merge. Don't run <code>git commit</code> in the middle; use <code>--continue</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Unseen: you rebased a branch you had already pushed</summary>
+    <div class="body"><p>Your own branch <code>feature</code> (only you use it) was pushed yesterday. Today you ran <code>git rebase main</code> on it. Now <code>git push</code> says <code>! [rejected] feature -&gt; feature (non-fast-forward)</code> and status says "have diverged, 3 and 2 different commits". <code>git pull</code> would merge the old copies back in. What do you run, and why is it safer than <code>--force</code>?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git push --force-with-lease</pre><p>Rebase gave the commits new hashes, so origin's feature (old hashes) is not in your history: any normal push is rejected. You really do want to replace it. <code>--force-with-lease</code> replaces it <b>only if</b> origin's feature is still where your <code>origin/feature</code> says. If someone pushed to it since your last fetch, it refuses instead of erasing their work. <code>--force</code> erases blindly. Never do this on main or any branch others build on: use revert or merge there.</p></details>
+    </div></details>
+
   <!-- ============ LABS ============ -->
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="gitremote-01"> <code>labs/03-git-remote/01-remote-push</code>
@@ -348,6 +381,14 @@ bc59506 HEAD@{1}: commit: Add rate limit config
       <span>Teammate pushed first; pull --rebase, resolve a conflict, keep history linear, push</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="gitremote-10"> <code>labs/03-git-remote/10-twist-secret-leak</code>
       <span>Find the commit that leaked .env, branch it, ignore .env from now on</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-11"> <code>labs/03-git-remote/11-quiz-reset-wrong-place</code>
+      <span>Hard: reset --hard to the wrong place, then committed on top; reflog + rebase, keep original hashes, push</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-12"> <code>labs/03-git-remote/12-quiz-revert-merge</code>
+      <span>Hard: undo a pushed merge with git revert -m 1 (one commit, no history rewrite)</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-13"> <code>labs/03-git-remote/13-twist-remote-branches</code>
+      <span>fetch --prune, track a teammate's branch, push -u, delete a branch on origin, fast-forward main</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="gitremote-14"> <code>labs/03-git-remote/14-twist-hotfix-release</code>
+      <span>Push rejected → fetch, two-dot logs, rebase, push; cherry-pick only the fix onto release-1.0 and push it</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <!-- ============ CHEAT SHEET ============ -->
@@ -367,6 +408,10 @@ bc59506 HEAD@{1}: commit: Add rate limit config
     <li><code>git cherry-pick HASH</code> copy one commit onto the current branch</li>
     <li><code>git reset --soft|--mixed|--hard HEAD~1</code> move branch back; keep staged / keep files / lose all</li>
     <li><code>git revert --no-edit HASH</code> undo a pushed commit with a new commit</li>
+    <li><code>git revert -m 1 --no-edit MERGE</code> undo a whole pushed merge (keep parent 1 = main side)</li>
+    <li><code>git fetch --prune</code> / <code>git push origin --delete B</code> drop stale origin/* names / delete B on origin</li>
+    <li><code>git switch B</code> (origin/B exists) / <code>git branch -u origin/B</code> create tracking branch / set upstream later</li>
+    <li><code>git push --force-with-lease</code> only for your own rebased branch; refuses if someone pushed meanwhile</li>
     <li><code>git cat-file -t/-p HASH</code>, <code>cat .git/HEAD</code>, <code>git rev-parse main</code> look inside</li>
     <li><code>git log --all --oneline -- .env</code>, <code>git show HASH:.env</code> find a leaked secret → rotate it</li>
     <li><code>git rev-list --count main</code>, <code>git merge-base --is-ancestor A B</code> check your own work like the grader</li>

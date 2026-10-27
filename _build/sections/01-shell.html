@@ -253,6 +253,35 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
 <span class="p">$</span> find build -name '*.tmp' -delete</pre><p>Quote <code>'*.tmp'</code> so <code>find</code> (not the shell) does the matching in every sub-folder. <code>rm build/*.tmp</code> would only reach the top level.</p></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Validate AI code: does the function exist?</summary>
+    <div class="body"><p>A generated pull request calls <code>send_invoice(...)</code>. In the repo folder <code>src</code> (many sub-folders), save every line that mentions <code>send_invoice</code> as <code>path:line:text</code>, sorted, into <code>reports/invoice.txt</code>. Then save just the <b>number of files</b> under <code>src</code> that contain <code>TODO</code> into <code>reports/todo-files.txt</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> mkdir -p reports
+<span class="p">$</span> grep -rn 'send_invoice' src | sort &gt; reports/invoice.txt
+<span class="p">$</span> grep -rl 'TODO' src | wc -l &gt; reports/todo-files.txt
+<span class="p">$</span> grep -r 'def send_invoice' src        <span class="c"># no output = it is never defined: reject the PR</span></pre><p><code>-r</code> walks every sub-folder, <code>-n</code> adds line numbers, <code>-l</code> prints each matching <b>file</b> once (so <code>wc -l</code> counts files, not lines). <code>sort</code> because <code>-r</code>'s order isn't guaranteed. Trap: <code>grep -rc TODO src</code> prints one count per file (<code>src/a.py:2</code>...), not one number.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Keep only the errors of a build, log a failure</summary>
+    <div class="body"><p><code>./build.sh</code> prints progress on stdout and problems on stderr, and exits non-zero when it fails. Run it so that the screen stays quiet, the progress is thrown away, and only the problems go into <code>build-errors.txt</code>. In the <b>same</b> command line, append <code>&lt;today&gt; build failed</code> to <code>build.log</code> only if the build failed (date from <code>date +%F</code>).</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> chmod +x build.sh                 <span class="c"># only if you get "Permission denied"</span>
+<span class="p">$</span> ./build.sh &gt; /dev/null 2&gt; build-errors.txt || echo "$(date +%F) build failed" &gt;&gt; build.log
+<span class="p">$</span> echo $?                          <span class="c"># exit code of the LAST command on that line</span></pre><p><code>&gt;</code> is stream 1 (stdout), <code>2&gt;</code> is stream 2 (stderr), <code>/dev/null</code> throws output away. <code>a || b</code> runs b only when a failed (exit code not 0); <code>a &amp;&amp; b</code> only when it succeeded. <code>$(date +%F)</code> is replaced by e.g. <code>2026-10-28</code>, but only inside <b>double</b> quotes. Both streams into one file: <code>&gt; all.txt 2&gt;&amp;1</code> (2&gt;&amp;1 <b>after</b> the file).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Sum and maximum from a CSV with a header</summary>
+    <div class="body"><p><code>payments.csv</code> starts with the header <code>id,amount,currency</code>, then lines like <code>17,250,GBP</code>. Save the total <code>amount</code> of the <code>GBP</code> payments into <code>gbp-total.txt</code>, and the whole line of the single biggest payment (any currency) into <code>biggest.txt</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> awk -F, '$3 == "GBP" { s += $2 } END { print s }' payments.csv &gt; gbp-total.txt
+<span class="p">$</span> tail -n +2 payments.csv | sort -t, -k2 -rn | head -n 1 &gt; biggest.txt</pre><p><code>awk -F,</code> splits on commas, <code>$3 == "GBP"</code> compares the whole field (a grep for <code>GBP</code> could also hit an id or note), <code>END</code> prints once at the end. <code>tail -n +2</code> skips the header; <code>sort -t, -k2 -rn</code> = split on commas, sort by field 2, as numbers, biggest first. Without awk: <code>grep ',GBP$' payments.csv | cut -d, -f2 | paste -sd+ | bc</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Count, record and delete month-old logs</summary>
+    <div class="body"><p>Under <code>srv</code> (many sub-folders) find every <code>.log</code> <b>file</b> not modified for more than 30 days. Save their paths, sorted, into <code>old.txt</code> <b>and</b> see how many there are on screen, in one command. Then delete exactly those files.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> find srv -type f -name '*.log' -mtime +30 | sort | tee old.txt | wc -l
+3
+<span class="p">$</span> cat old.txt                                         <span class="c"># read the list before deleting</span>
+<span class="p">$</span> find srv -type f -name '*.log' -mtime +30 -delete</pre><p><code>tee FILE</code> writes its input to the file <b>and</b> passes it on down the pipe (a T-junction), so you save the list and count it at once. <code>-mtime +30</code> = older than 30 days (<code>-30</code> = newer), <code>-size +1M</code> works the same way for size. <code>-type f</code> skips folders named like <code>logs</code>. Moving instead of deleting: <code>-exec mv {} archive/ \;</code>.</p></details>
+    </div></details>
+
   <!-- ===================================================== -->
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="shell-01"> <code>labs/01-shell/01-files-and-folders</code>
@@ -273,6 +302,14 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
       <span>Count 5xx per service with grep | cut | sort | uniq -c, pick the top</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="shell-09"> <code>labs/01-shell/09-twist-dated-folders</code>
       <span>Move logs into dated folders with *, collect 1000ms+ requests in time order</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-10"> <code>labs/01-shell/10-quiz-grep-whole-repo</code>
+      <span>Validate AI code: grep -rn | sort, -rl with -E for hard-coded secrets, count across files with wc -l</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-11"> <code>labs/01-shell/11-twist-csv-orders</code>
+      <span>CSV with a header: tail -n +2, cut -d, -f, paid vs unpaid trap, awk sum, top 2 customers</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-12"> <code>labs/01-shell/12-twist-script-exit-codes</code>
+      <span>chmod +x a script, split stdout/stderr with 2&gt;, 2&gt;&amp;1 order, $?, $( ), &amp;&amp; / ||</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="shell-13"> <code>labs/01-shell/13-quiz-find-old-big-logs</code>
+      <span>find by type, name, size and age; count; -exec mv into archive; cp -r a folder with hidden files</span> <span class="lvl quiz">Quiz-style</span></label></li>
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>
@@ -294,6 +331,10 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
     <li><code>cut -d' ' -f2</code> field 2 of space-separated lines</li>
     <li><code>wc -l &lt; f</code> just the line count</li>
     <li><code>find . -name '*.log'</code> find files by name</li>
+    <li><code>find d -type f -name '*.log' -size +100k -mtime +14</code> files only, bigger than 100 KiB, older than 14 days; add <code>-exec mv {} archive/ \;</code> to act</li>
+    <li><code>grep -rn 'x' dir | sort</code> search a whole tree; <code>-l</code> file names only</li>
+    <li><code>cmd &gt; out 2&gt; err</code> split streams; <code>cmd &gt; all 2&gt;&amp;1</code> both (2&gt;&amp;1 last)</li>
+    <li><code>echo $?</code> last exit code; <code>a &amp;&amp; b || c</code> b on success, c on failure; <code>"$(cmd)"</code> insert output</li>
     <li>Order: mkdir -&gt; grep (&gt; then &gt;&gt;) -&gt; cat to check -&gt; mv last</li>
   </ul></div>
 </section>

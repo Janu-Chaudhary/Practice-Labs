@@ -2,13 +2,20 @@
 
 Hands-on practice for the terminal tasks in the Creative Problem Solving quizzes.
 
+## Get it
+```
+git clone https://github.com/Janu-Chaudhary/Practice-Labs.git
+cd Practice-Labs
+```
+You need `bash`, `git`, `python3`, Docker (Topics 4 and 6) and `pip install pytest ruff pyyaml` (Topic 5). On Windows, use WSL. All commands below run from the `Practice-Labs` folder.
+
 ## Start here
 1. Open `guide.html` in your browser and read **Start here**. Do the one-time setup it lists.
 2. Practise in the quiz-style browser tool:
    ```
-   ~/Desktop/csp/practice/start-lab-tool.sh
+   ./start-lab-tool.sh
    ```
-   It opens http://127.0.0.1:8765. Keep that terminal open; Ctrl+C stops it.
+   It serves http://127.0.0.1:8765 and opens it on Linux (on macOS/WSL, open that link yourself). Keep that terminal open; Ctrl+C stops it.
 
 ## What's inside
 | Path | What it is |
@@ -16,7 +23,7 @@ Hands-on practice for the terminal tasks in the Creative Problem Solving quizzes
 | `guide.html` | Topic guides: mental models, commands, errors, traps, worked scenarios, cheat sheets |
 | `start-lab-tool.sh`, `lab-tool/` | The browser tool: task, file panel, real terminal, Check button |
 | `labs/01-shell` … `labs/06-migrations` | The labs: each folder has `TASK.md`, `setup.sh`, `check.sh`, `SOLUTION.md` |
-| `labs/bin/flyway` | Runs Flyway through Docker (put `labs/bin` on your PATH, see the guide) |
+| `labs/bin/flyway` | Runs Flyway through Docker. For Topic 6 in your own terminal: `export PATH="$PWD/labs/bin:$PATH"` |
 | `_build/` | Source of `guide.html`. Rebuild with `python3 _build/assemble.py` |
 
 ## Without the browser tool

@@ -1,2 +1,3 @@
 labs/**/work/
 __pycache__/
+.claude/
