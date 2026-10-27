@@ -7,7 +7,7 @@ Hands-on practice for the terminal tasks in the Creative Problem Solving quizzes
 git clone https://github.com/Janu-Chaudhary/Practice-Labs.git
 cd Practice-Labs
 ```
-You need `bash`, `git`, `python3` and Docker (for Topics 4 and 6). On Windows, use WSL. All commands below run from the `Practice-Labs` folder.
+You need `bash`, `git`, `python3`, Docker (Topics 4 and 6) and `pip install pytest ruff pyyaml` (Topic 5). On Windows, use WSL. All commands below run from the `Practice-Labs` folder.
 
 ## Start here
 1. Open `guide.html` in your browser and read **Start here**. Do the one-time setup it lists.

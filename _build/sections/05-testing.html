@@ -313,6 +313,86 @@ def test_rejects_seven_characters():
 4. len(code) == 5  -&gt;  == 4          "Fix postcode length"                        pytest: green</pre><p>If you write both tests first, commit 2 is still red. If you fix both bugs in commit 2, the postcode test in commit 3 never fails, so it proves nothing.</p></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: which of 8 commits broke it? (git bisect)</summary>
+    <div class="body"><p>Rule: 10 or more items get 10% off. Tag <code>v1.0</code> was right; 8 commits later, exactly 10 items get no discount, and CI is green (tests only use 3 and 20 items). Find the first bad commit without reading every diff, then do the usual failing-test + fix pair. Where do you put the test while bisecting, and why?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> code test_regression.py         <span class="c"># NEW untracked file: assert bulk_discount(10) == 0.10</span>
+<span class="p">$</span> pytest -q                       <span class="c"># 1 failed: bug reproduced</span>
+<span class="p">$</span> git bisect start
+<span class="p">$</span> git bisect bad                  <span class="c"># HEAD is bad</span>
+<span class="p">$</span> git bisect good v1.0            <span class="c"># this one was good; git checks out the middle</span>
+<span class="p">$</span> git bisect run pytest -q test_regression.py
+e660570... is the first bad commit
+    Tidy pricing code              <span class="c"># qty &gt;= BULK_MIN became qty &gt; BULK_MIN</span>
+<span class="p">$</span> git bisect reset                <span class="c"># back on main (else you stay on a detached HEAD)</span>
+<span class="p">$</span> git add test_regression.py ; git commit -m "Add failing test for exactly 10 items"
+<span class="p">$</span> code pricing.py                 <span class="c"># &gt;  -&gt;  &gt;=</span>
+<span class="p">$</span> pytest -q ; git add pricing.py ; git commit -m "Fix bulk discount for 10 items"</pre><p><code>git bisect run</code> reads the exit code: 0 = good, 1 = bad (125 = skip). An <b>untracked</b> test file stays put while bisect checks out old commits; editing a tracked test file first makes the checkout refuse ("local changes would be overwritten"). Binary search: 8 commits need only about 3 test runs. Without <code>run</code>, test each step yourself and type <code>git bisect good</code> or <code>git bisect bad</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: one table of boundary tests (parametrize)</summary>
+    <div class="body"><p>Ticket prices: 0-4 free, 5-17 = 8, 18-64 = 15, 65-120 = 10, below 0 or above 120 = <code>ValueError</code>. Write the fewest test functions that check both sides of every edge and both invalid edges. Which ages, and what does a failing row look like?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">import pytest
+from tickets import ticket_price
+
+@pytest.mark.parametrize("age, expected", [
+    (0, 0), (4, 0), (5, 8), (17, 8), (18, 15), (64, 15), (65, 10), (120, 10)])
+def test_price(age, expected):
+    assert ticket_price(age) == expected
+
+@pytest.mark.parametrize("age", [-1, 121])
+def test_invalid_age(age):
+    with pytest.raises(ValueError):
+        ticket_price(age)
+<span class="p">$</span> pytest -v
+test_tickets.py::test_price[65-10] FAILED       <span class="c"># each row is its own test, with its values in the id</span></pre><p>The names are ONE string <code>"age, expected"</code>; each tuple is one run. Every edge needs the last value inside AND the first value outside (64 and 65; 120 and 121), or a <code>&lt;</code>/<code>&lt;=</code> slip survives.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Hard: green alone, red in CI (flaky tests)</summary>
+    <div class="body"><p><code>pytest test_cart.py::test_count_after_add</code> passes. The full <code>pytest</code> run fails it. A second test, <code>test_shop_is_open</code>, calls <code>is_open()</code> (which uses <code>datetime.now()</code>) and fails only in the 2 a.m. nightly CI run. Why is each flaky, how do you rerun just the failures quickly, and how do you make both deterministic?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> pytest -x            <span class="c"># stop at the first failure</span>
+<span class="p">$</span> pytest --lf          <span class="c"># rerun only the tests that failed last time (--last-failed)</span>
+<span class="p">$</span> pytest -p no:randomly -v   <span class="c"># (only if pytest-randomly is installed) fixed order</span>
+
+<span class="c"># 1) shared state: cart.py keeps a module-level list, an earlier test left items in it.</span>
+@pytest.fixture(autouse=True)
+def empty_cart():
+    cart.clear()          <span class="c"># fresh state before EVERY test</span>
+    yield
+
+<span class="c"># 2) time: pass the time in instead of reading the real clock</span>
+def test_shop_is_open_monday_10am():
+    assert is_open(datetime(2026, 10, 26, 10, 0)) is True
+def test_shop_is_closed_at_2am():
+    assert is_open(datetime(2026, 10, 26, 2, 0)) is False</pre><p>A test must give the same result alone, in any order, at any time. Order-dependence = shared state between tests (fix: a fixture that resets it, or a new object per test). Time-dependence = the real clock (fix: inject the time / a fake clock). Never "fix" flakiness with retries, <code>skip</code> or <code>continue-on-error</code>: that hides real bugs.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Hard: write the whole CI workflow, with a lint gate</summary>
+    <div class="body"><p>No CI exists. Write <code>.github/workflows/ci.yml</code>: on pull requests to main and pushes to main, job <code>build-and-test</code> must install, lint with <code>ruff check .</code>, then run <code>pytest</code>. <code>requirements.txt</code> only lists <code>pytest</code>, and <code>ruff check .</code> currently reports 2 errors. What do you commit, in which order?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> ruff check .                 <span class="c"># fix both errors in the code first</span>
+<span class="p">$</span> echo ruff &gt;&gt; requirements.txt  <span class="c"># the runner is a clean VM: no ruff unless installed</span>
+<span class="p">$</span> git add temps.py requirements.txt ; git commit -m "Fix lint errors, add ruff"
+<span class="p">$</span> mkdir -p .github/workflows ; code .github/workflows/ci.yml
+name: CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: ruff check .         <span class="c"># exit 1 on findings = red job</span>
+      - run: pytest
+<span class="p">$</span> python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"
+<span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Add CI workflow"</pre><p>Lint fix first, so the workflow's first run is green. No <code>continue-on-error</code> and no <code>|| true</code>: either makes a failing step count as success. Missing ruff in requirements = "ruff: command not found" (exit 127) on CI even though it works on your laptop. <code>ruff check . --fix</code> removes an unused import, but not an unused variable (an "unsafe" fix): edit that yourself.</p></details>
+    </div></details>
+
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="testing-01"> <code>labs/05-testing/01-run-pytest</code>
       <span>Run pytest, read the failure, record test name, exit code, pass count, actual value</span> <span class="lvl drill">Drill</span></label></li>
@@ -334,6 +414,14 @@ def test_rejects_seven_characters():
       <span>Code is right but mutants survive: add the missing 7 / 8 boundary tests</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="testing-10"> <code>labs/05-testing/10-twist-two-bugs</code>
       <span>Two bugs, two failing-test + fix pairs: red, green, red, green</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-11"> <code>labs/05-testing/11-quiz-bisect-regression</code>
+      <span>Hard: git bisect run finds the commit that broke "10 items", then regression test + fix</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-12"> <code>labs/05-testing/12-quiz-parametrize-ticket-prices</code>
+      <span>Hard: one parametrized boundary table + pytest.raises; must kill 11 off-by-one mutants</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-13"> <code>labs/05-testing/13-twist-mock-to-fake</code>
+      <span>Hard: 100% coverage with a Mock hides stored rejected orders; write a fake + real asserts, then fix</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="testing-14"> <code>labs/05-testing/14-twist-ci-from-scratch</code>
+      <span>Hard: write ci.yml (PR + push, install, ruff lint, pytest) after making the repo lint-clean</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>

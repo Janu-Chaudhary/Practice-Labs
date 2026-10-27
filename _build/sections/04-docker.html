@@ -296,6 +296,53 @@ CMD ["node", "server.js"]
       <details class="answer"><summary>Show answer</summary><p>(a) PID 1 inside (PID namespace); another PID on the host (<code>docker top api</code>). (b) Throttled: keeps running, slower. (c) The kernel may kill it (OOM), not just slow it. (d) Namespaces (what you see), not cgroups (how much you use).</p></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The password is in the image</summary>
+    <div class="body"><p>A teammate's Dockerfile has <code>ENV DB_PASSWORD=Summer2024!</code> and <code>COPY . .</code>, and there is no <code>.dockerignore</code>. The project folder has a <code>.env</code> with <code>DB_HOST</code> and <code>DB_PASSWORD</code>. They built <code>pay:1.0</code>. (a) Show two ways to read the password from the image. (b) Fix the build and build <code>pay:1.1</code>. (c) Run it as <code>pay</code> on host 8080 -&gt; 3000 with the settings from <code>.env</code>, using one flag. (d) Remove the leaky tag.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker history --no-trunc pay:1.0 | grep ENV      <span class="c"># ENV DB_PASSWORD=Summer2024!</span>
+<span class="p">$</span> docker run --rm pay:1.0 cat /app/.env              <span class="c"># COPY . . copied .env in</span>
+<span class="c"># delete the ENV DB_... lines from the Dockerfile, then:</span>
+<span class="p">$</span> printf '.env\nnode_modules\n.git\n' &gt; .dockerignore
+<span class="p">$</span> docker build -t pay:1.1 .
+<span class="p">$</span> docker run -d --name pay -p 8080:3000 --env-file .env pay:1.1
+<span class="p">$</span> docker image rm pay:1.0</pre><p><code>ENV</code> (and <code>ARG</code>) values are recorded in the image metadata and in <code>docker history</code>. <code>COPY . .</code> copies everything in the build context that <code>.dockerignore</code> doesn't exclude. A later <code>RUN rm .env</code> doesn't help: the file stays in the earlier layer. Config and secrets go in the environment at run time (<code>--env-file</code> or <code>-e</code>), so one image runs anywhere. Lab 10.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> web can't reach api on localhost</summary>
+    <div class="body"><p><code>api</code> runs with <code>-p 8119:3000</code>. <code>web</code> runs with <code>-e API_URL=http://localhost:8119 -p 8111:3000</code>. From your laptop, <code>curl localhost:8119</code> works, but web logs <code>ECONNREFUSED</code>. Make web reach api <b>by name</b>, and make api internal only (no host port).</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker network create appnet
+<span class="p">$</span> docker rm -f api web
+<span class="p">$</span> docker run -d --name api --network appnet api:1.0
+<span class="p">$</span> docker run -d --name web --network appnet -p 8111:3000 -e API_URL=http://api:3000 web:1.0
+<span class="p">$</span> docker exec web wget -qO- http://api:3000/stock     <span class="c"># debug from inside</span></pre><p>Inside a container, <code>localhost</code> is that container (its own network namespace). 8119 is a <b>host</b> port; container-to-container traffic uses the <b>container</b> port. Names resolve only on a <b>user-defined</b> network, not on the default bridge. Env, ports and networks are fixed at create time, so recreate (restart keeps the old ones). Lab 11.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> It exits right after docker run</summary>
+    <div class="body"><p><code>docker run -d --name report -p 8112:3000 report:1.0</code> prints an id, but <code>docker ps</code> is empty. The app needs <code>/config/settings.json</code>, which ops keeps on the host in <code>./config/</code> and wants to edit without rebuilding. (a) How do you find the reason and the exit code? (b) Run it correctly, config read-only. (c) Ops changes the title in the file. What must you do so the app shows it?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker ps -a                                   <span class="c"># report  Exited (3)</span>
+<span class="p">$</span> docker logs report                             <span class="c"># FATAL: cannot read /config/settings.json (ENOENT)</span>
+<span class="p">$</span> docker inspect -f '{{.State.ExitCode}}' report  <span class="c"># 3</span>
+<span class="p">$</span> docker rm report
+<span class="p">$</span> docker run -d --name report -p 8112:3000 -v "$(pwd)/config":/config:ro report:1.0
+<span class="c"># (c) after editing config/settings.json on the host:</span>
+<span class="p">$</span> docker restart report</pre><p><code>-d</code> only says the container started; the main process exiting ends it. Logs survive on stopped containers. A left side starting with <code>/</code> is a <b>bind mount</b> (a host folder you choose); <code>-v config:/config</code> would create an empty <b>named volume</b> instead. The container sees the edited file immediately, but this app reads it only at start, so restart. Mounts can't be added to an existing container: rm + run. Lab 12.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Prove the cache, then retag</summary>
+    <div class="body"><p>The Dockerfile is <code>FROM / WORKDIR /app / COPY . . / RUN npm ci / CMD</code>, and the folder has a 30 MB <code>logs/</code> and a laptop <code>node_modules/</code>. Make server.js edits skip npm ci (you may add lines), keep the junk out, build <code>shop:1.2</code> saving the plain build output to <code>build.log</code> (and on screen), point <code>shop:latest</code> at 1.2 without rebuilding, and delete <code>shop:1.0</code>.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY . .
+CMD ["node", "server.js"]
+<span class="p">$</span> printf 'logs\nnode_modules\n.git\n.env\n' &gt; .dockerignore
+<span class="p">$</span> docker build --progress=plain -t shop:1.2 . 2&gt;&amp;1 | tee build.log
+#8 [4/5] RUN npm ci --omit=dev
+#8 CACHED
+<span class="p">$</span> docker tag shop:1.2 shop:latest
+<span class="p">$</span> docker image rm shop:1.0</pre><p>Build output goes to stderr, so without <code>2&gt;&amp;1</code> the log file stays empty. A tag is just a name pointing at an image ID: <code>docker tag SOURCE NEW</code>, no copy, same IMAGE ID. <code>image rm</code> only untags while other tags still point at that image. Lab 13.</p></details>
+    </div></details>
+
   <!-- ===================== LABS ===================== -->
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="docker-01"> <code>labs/04-docker/01-build-tag</code>
@@ -316,6 +363,14 @@ CMD ["node", "server.js"]
       <span>Container Up and published but server bound to 127.0.0.1: fix, rebuild, recreate</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="docker-09"> <code>labs/04-docker/09-twist-port-taken</code>
       <span>Deploy v2 on 8090 through "name already in use" and "port is already allocated"</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-10"> <code>labs/04-docker/10-quiz-secret-env-file</code>
+      <span>Find a baked-in password (history, inspect, file); .dockerignore + --env-file; remove the leaky tag</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-11"> <code>labs/04-docker/11-quiz-network-by-name</code>
+      <span>User-defined network: web calls api by container name, api not published; exec + inspect the IP</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-12"> <code>labs/04-docker/12-twist-crash-bind-config</code>
+      <span>Container exits: ps -a, logs, ExitCode; read-only bind mount of host config; fix, start, restart</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="docker-13"> <code>labs/04-docker/13-twist-cache-retag</code>
+      <span>Cache-friendly Dockerfile + .dockerignore, prove CACHED in a tee'd build log, docker tag latest/stable, rm old tag</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <!-- ===================== CHEAT ===================== -->
@@ -337,5 +392,9 @@ CMD ["node", "server.js"]
     <li><code>EXPOSE</code> documents only; <code>-p</code> publishes; app must listen on <code>0.0.0.0</code></li>
     <li>Dockerfile order: <code>FROM, WORKDIR, COPY package*.json ./, RUN npm ci, COPY . ., EXPOSE, CMD</code></li>
     <li><code>curl http://localhost:8080/</code> test from the host</li>
+    <li><code>docker run --env-file .env ...</code> config/secrets at run time, never <code>ENV</code> in the Dockerfile</li>
+    <li><code>docker network create net</code> + <code>--network net</code> containers reach each other by name on the container port</li>
+    <li><code>-v "$(pwd)/config":/config:ro</code> read-only bind mount of a host folder</li>
+    <li><code>docker tag src:1.2 src:latest</code> another name, same image ID</li>
   </ul></div>
 </section>

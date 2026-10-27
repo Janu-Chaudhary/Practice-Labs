@@ -215,6 +215,40 @@ search
 UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Copying works only because full_name still has the values; data that exists nowhere else needs a backup.</p></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> flyway info says 02 <i>Failed</i></summary>
+    <div class="body"><p><code>02_add_total_paise.up.sql</code> = ADD COLUMN, UPDATE (backfill), CREATE INDEX. It ran <b>without a transaction</b> and failed on the index (typo <code>ordrs</code>). <code>flyway migrate</code> now says <i>Detected failed migration to version 02. Please remove any half-completed changes then run repair</i>. Get 02 fully applied without losing orders.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> sqlite3 -header -column shop.db "SELECT * FROM orders;"     <span class="c"># total_paise exists and is filled: steps 1+2 committed</span>
+<span class="p">$</span> sed -i 's/ON ordrs/ON orders/' migrations/02_add_total_paise.up.sql   <span class="c"># OK: 02 never succeeded anywhere</span>
+<span class="p">$</span> sqlite3 shop.db "ALTER TABLE orders DROP COLUMN total_paise;"   <span class="c"># remove the half-done change</span>
+<span class="p">$</span> flyway repair       <span class="c"># removes the Failed row</span>
+<span class="p">$</span> flyway migrate      <span class="c"># 02 runs from line 1, Success</span></pre><p>Order matters: repair first and then migrate gives <code>duplicate column name</code> and a new Failed row. With a transaction (the SQLite/PostgreSQL default) there is no Failed row at all: everything rolls back. Don't delete the ALTER/UPDATE from 02: a fresh database still needs them.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Change a view: new V file or edit the R file?</summary>
+    <div class="body"><p>Default naming. <code>R__active_users.sql</code> (DROP VIEW IF EXISTS + CREATE VIEW) is applied. Users need a <code>city</code> column, and the view must show it. What files do you write, what does <code>flyway info</code> show before migrate, and what is in the history table afterwards?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo "ALTER TABLE users ADD COLUMN city TEXT;" &gt; migrations/V3__add_city.sql
+<span class="p">$</span> code migrations/R__active_users.sql      <span class="c"># SELECT id, name, city FROM users WHERE active = 1;</span>
+<span class="p">$</span> flyway info       <span class="c"># V3 Pending; old R row "Outdated" + new R row "Pending"</span>
+<span class="p">$</span> flyway migrate    <span class="c"># V3 first, then the repeatable</span></pre><p>Versioned (V) = runs once, never edit. Repeatable (R__, no version) = re-runs whenever its checksum changes, after all versioned ones; editing it IS how you change it. History gets a second R__active_users.sql row (version empty, new checksum); info shows the old one as Superseded.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Two lower versions arrive late: outOfOrder or renumber?</summary>
+    <div class="body"><p>Your DB is at <code>202610251200</code>. Now there are <code>202610221500_add_order_status</code> (teammate's hotfix, already applied in production) and your own <code>202610231000_add_order_notes</code> (never committed, never applied anywhere). <code>flyway info</code> shows both as <b>Ignored</b>. Fix it.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> mv migrations/202610231000_add_order_notes.up.sql   migrations/202610271100_add_order_notes.up.sql
+<span class="p">$</span> mv migrations/202610231000_add_order_notes.down.sql migrations/202610271100_add_order_notes.down.sql
+<span class="p">$</span> git add migrations &amp;&amp; git commit -m "Add order notes migration (202610271100)"
+<span class="p">$</span> flyway migrate -outOfOrder=true     <span class="c"># hotfix: "Out of Order"; notes: normal Success</span></pre><p>Renumber only what ran nowhere (the hotfix's version is in production's history; renaming it would make production run it twice). Rename <b>before</b> outOfOrder, or the old version gets applied too. <code>git mv</code> fails on untracked files (<i>not under version control</i>): use <code>mv</code> + <code>git add</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Read the history table: last run vs current version</summary>
+    <div class="body"><p>History (by installed_rank): 1 <code>01 BASELINE</code>, 2 <code>02</code>, 3 <code>03</code>, 4 <code>05</code>, 5 <code>04</code>. Which version ran last? What is the schema version? Which file's SQL never ran here? Then someone adds only a <code>--</code> comment to applied 03 and validate fails: repair or new migration?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> sqlite3 shop.db "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;"   <span class="c"># 04</span>
+<span class="p">$</span> flyway info | grep "Schema version"      <span class="c"># 05</span>
+<span class="p">$</span> sqlite3 shop.db "SELECT version FROM flyway_schema_history WHERE type = 'BASELINE';"   <span class="c"># 01: info says Ignored (Baseline)</span>
+<span class="p">$</span> git diff HEAD~1 HEAD                     <span class="c"># only a comment line</span>
+<span class="p">$</span> flyway repair                            <span class="c"># records the new checksum; runs no SQL</span></pre><p>installed_rank = order Flyway ran things; version = order it wants them. The checksum covers the whole text, comments too. A comment changes nothing in any database, so repair is right; an edit that changes SQL (lab 07) needs a new migration instead.</p></details>
+    </div></details>
+
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="migrations-01"> <code>labs/06-migrations/01-sqlite-basics</code>
       <span>sqlite3 prompt, .tables/.schema, one-shot INSERT, save a count with &gt;</span> <span class="lvl drill">Drill</span></label></li>
@@ -236,6 +270,14 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
       <span>user_name -&gt; full_name in staged migrations (-target), backfill, contract, repairing down</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-10"> <code>labs/06-migrations/10-twist-two-branches-05</code>
       <span>two branches both add 05: rename up+down to a timestamp, merge, migrate both</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-11"> <code>labs/06-migrations/11-quiz-failed-migration-repair</code>
+      <span>non-transactional 02 failed halfway: read the Failed row, undo the half-done change, fix, repair, migrate</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-12"> <code>labs/06-migrations/12-quiz-repeatable-view</code>
+      <span>versioned vs repeatable: V3 adds a column, edit R__active_users.sql, add a new R__ view, one migrate</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-13"> <code>labs/06-migrations/13-twist-out-of-order-hotfix</code>
+      <span>two late lower versions ("Ignored"): renumber yours, -outOfOrder=true for the production hotfix</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-14"> <code>labs/06-migrations/14-twist-history-detective</code>
+      <span>answer questions from flyway_schema_history (installed_rank, baseline, checksum), then repair a comment-only edit</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>

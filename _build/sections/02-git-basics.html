@@ -282,6 +282,49 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
 <span class="p">$</span> git commit --no-edit</pre></details>
     </div></details>
 
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Typo in the last commit, a forgotten file, and a private edit staged</summary>
+    <div class="body"><p>Your last commit is "Add setings loader" (typo) and is missing settings.json (untracked). todo.txt has a private note that is <b>staged</b>. Nothing pushed. Fix the last commit (message "Add settings loader", include settings.json) without adding a commit, and keep the todo.txt edit out of it but still on disk.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git restore --staged todo.txt          <span class="c"># FIRST: unstage, edit stays on disk</span>
+<span class="p">$</span> git add settings.json
+<span class="p">$</span> git commit --amend -m "Add settings loader"
+<span class="p">$</span> git status                             <span class="c"># only: modified todo.txt (not staged)</span></pre><p><code>--amend</code> rebuilds the last commit from whatever is staged NOW, so unstage todo.txt before amending. Without <code>-m</code>, amend opens the editor. <code>git restore todo.txt</code> (no <code>--staged</code>) would be wrong: it copies the staged private version over your file.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Copy one fix from feature to main, then tag it</summary>
+    <div class="body"><pre class="term">* a87 (feature) Document power()
+* f84 Fix divide by zero
+* e41 Add power()
+| * 57c (HEAD -&gt; main) Explain how to run
+|/
+* 4c1 (tag: v1.0.0) Add calc</pre><p>Get only "Fix divide by zero" onto main (no merge, power() must not come), then add an annotated tag <code>v1.0.1</code> with message "Hotfix: divide by zero". How many commits does main have afterwards?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git log feature --oneline | grep divide
+f84 Fix divide by zero
+<span class="p">$</span> git cherry-pick f84
+<span class="p">$</span> git tag -a v1.0.1 -m "Hotfix: divide by zero"
+<span class="p">$</span> git cat-file -t v1.0.1                  <span class="c"># tag  (annotated = its own object)</span></pre><p>3 commits (Add calc, Explain how to run, the copy). The copy gets a NEW hash because its parent is different. <code>git cherry-pick feature</code> would copy feature's tip ("Document power()"), not the fix. <code>git tag v1.0.1</code> without <code>-a</code> is a lightweight tag.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Someone left the wrong merge half-done</summary>
+    <div class="body"><p><code>git status</code> says "You have unmerged paths", both modified: app.py. A teammate started <code>git merge experiment</code>, but experiment must never reach main. You need to merge <code>feature</code>, where both sides added a different last line to requirements.txt and both lines must stay.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git merge --abort                       <span class="c"># back to main's tip, no merge in progress</span>
+<span class="p">$</span> git merge feature                       <span class="c"># CONFLICT in requirements.txt</span>
+<span class="p">$</span> code requirements.txt                   <span class="c"># delete only the 3 marker lines, keep both lines</span>
+<span class="p">$</span> git add requirements.txt
+<span class="p">$</span> git commit --no-edit</pre><p>Running <code>git merge feature</code> first fails ("Merging is not possible because you have unmerged files"). Fixing app.py and committing would finish the experiment merge. "Keep both" means removing <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> and keeping the text from both halves (HEAD's half first).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Hotfix an old tagged release + read the objects</summary>
+    <div class="body"><p>main is 2 commits past the annotated tag <code>v1.0</code>. Make a fix commit on top of v1.0 only, keep it on a branch <code>v1-hotfix</code>, and return to main. Then answer: what is the type of <code>v1.0</code>? Which tree does your new commit point to? Two files in main's tree have the same content. How do you show that git stores them once?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git switch --detach v1.0                <span class="c"># or git checkout v1.0 -&gt; detached HEAD</span>
+<span class="p">$</span> echo "RETRIES = 3" &gt; config.py
+<span class="p">$</span> git commit -am "Fix retries for 1.0"
+<span class="p">$</span> git switch -c v1-hotfix                 <span class="c"># give the detached commit a name NOW</span>
+<span class="p">$</span> git switch main
+<span class="p">$</span> git cat-file -t v1.0                    <span class="c"># tag</span>
+<span class="p">$</span> git cat-file -p v1-hotfix               <span class="c"># first line: tree &lt;hash&gt;</span>
+<span class="p">$</span> git cat-file -p main^{tree}             <span class="c"># same blob hash on two lines = one stored object</span></pre><p>If you switch back to main before creating the branch, no branch points to the commit (git prints its hash so you can run <code>git branch v1-hotfix &lt;hash&gt;</code>). Blobs are named by a hash of their content, so files with the same bytes share one blob. The names are stored in the tree.</p></details>
+    </div></details>
+
   <div class="labs"><h3>Practice labs</h3><ul>
     <li><label><input type="checkbox" data-id="git-01"> <code>labs/02-git-basics/01-status-add-commit</code>
       <span>Two clean commits from a messy status; ignore debug.log</span> <span class="lvl drill">Drill</span></label></li>
@@ -303,6 +346,14 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
       <span>Move two commits from main to a new branch</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="git-10"> <code>labs/02-git-basics/10-twist-two-file-conflict</code>
       <span>Two conflicting files + a new file from feature</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="git-11"> <code>labs/02-git-basics/11-quiz-amend-forgotten-file</code>
+      <span>Unstage a private edit, then amend the last commit (typo + forgotten file)</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="git-12"> <code>labs/02-git-basics/12-quiz-cherry-pick-hotfix</code>
+      <span>Cherry-pick one commit from feature onto main, add an annotated tag</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="git-13"> <code>labs/02-git-basics/13-twist-abort-wrong-merge</code>
+      <span>Abort a half-done wrong merge, redo the right one keeping both sides</span> <span class="lvl twist">Twist</span></label></li>
+    <li><label><input type="checkbox" data-id="git-14"> <code>labs/02-git-basics/14-twist-detached-hotfix-internals</code>
+      <span>Hotfix an old tag from detached HEAD, then read trees/blobs with cat-file</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>
@@ -325,5 +376,9 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
     <li><code>git rm --cached f</code> untrack but keep; <code>git mv a b</code> rename</li>
     <li><code>git stash</code> / <code>git stash pop</code> park and restore unfinished work</li>
     <li><code>git reset --soft HEAD~1</code> undo the last commit, keep changes staged</li>
+    <li><code>git commit --amend -m "msg"</code> replace the last commit with what is staged now (unpushed only)</li>
+    <li><code>git cherry-pick &lt;hash&gt;</code> copy one commit onto the current branch (new hash)</li>
+    <li><code>git tag -a v1.0.1 -m "msg"</code> annotated tag on HEAD (no <code>-m</code> = editor)</li>
+    <li><code>git cat-file -t X</code> / <code>-p X</code> type / content of an object; <code>X^{tree}</code> = a commit's tree</li>
   </ul></div>
 </section>
