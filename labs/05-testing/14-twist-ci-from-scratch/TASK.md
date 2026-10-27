@@ -24,7 +24,8 @@ Exactly two new commits on `main`, in this order:
 1. Make the project lint-clean and installable: fix the two ruff errors in `temps.py` (keep the
    behaviour the same; the tests must still pass) and add `ruff` to `requirements.txt`.
    Commit only `temps.py` and `requirements.txt`.
-2. Create `.github/workflows/ci.yml` (you need `mkdir -p .github/workflows` first):
+2. Create `.github/workflows/ci.yml` in the Files panel with **+ New file** (type the whole path;
+   the folders are created for you):
    - triggers: `pull_request` to `main` **and** `push` to `main`
    - one job with id `build-and-test`, `runs-on: ubuntu-latest`
    - steps in this order: check out the code (`actions/checkout@v4`), set up Python
@@ -35,6 +36,9 @@ Exactly two new commits on `main`, in this order:
 
 Before committing, run locally exactly what CI will run: `ruff check .` and `pytest`.
 Check your YAML parses: `python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"`
+
+Edit `temps.py` and `requirements.txt` in the Files panel too (save with Ctrl+S). The terminal is for
+`ruff`, `pytest` and `git`.
 
 ## Stop
 - Don't edit `test_temps.py`. Don't push. No extra commits.

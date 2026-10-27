@@ -15,8 +15,12 @@ Source material (read what is relevant to your topic):
   T3L1 containers, T3L2 database migrations)
 Match the professor's vocabulary and scenario style (the four locations, named volumes, history table, etc).
 
-In the quiz, files are edited in a browser file panel and commands typed in a terminal. Locally the
-student edits files with VS Code (`code file`) or nano. Checks are on final state (branch tips, commit
+In the quiz, files are edited in a browser file panel and commands typed in a terminal. The lab tool
+matches that: its Files panel opens, creates (+ New file) and saves files. So TASK/SOLUTION tell the
+student to write file content in the Files panel (show the exact content), never with printf/echo/
+heredocs/sed/nano; the terminal is for commands (git, docker, flyway, pytest, shell pipelines and
+redirecting a command's output). Migrations: the student never uses the sqlite3 CLI, only flyway
+(check.sh may use sqlite3 internally to grade). Checks are on final state (branch tips, commit
 counts, file contents), so extra commits / wrong branch / wrong order fail.
 
 ## Layout (root = /home/janu-chaudhary/Desktop/csp/practice)

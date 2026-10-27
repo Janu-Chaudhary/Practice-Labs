@@ -37,6 +37,8 @@ contains the logs and the laptop's `node_modules`.
 you test an image).
 
 **Hints**
+- Edit `Dockerfile` and `server.js` in the Files panel and save with Ctrl+S. Create `.dockerignore`
+  with **+ New file** (one path per line). The terminal is for docker commands and the build log.
 - Look at how lab 06 ordered the lines. A changed input invalidates that step **and every later step**.
 - `docker build --progress=plain ...` prints one line per step, e.g. `#8 [4/5] RUN npm ci --omit=dev`
   then `#8 CACHED`.

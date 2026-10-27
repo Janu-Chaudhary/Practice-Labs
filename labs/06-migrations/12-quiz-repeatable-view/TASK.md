@@ -10,13 +10,14 @@
 3 users (Ravi is inactive) and 3 orders.
 
 **Task** (inside `work/`), finish with **one** `flyway migrate`:
-1. Look at the history table with sqlite3. What is in the `version` column for the repeatable row?
-2. Users need a city. Add a versioned migration `migrations/V3__add_city.sql` that adds `city TEXT` to `users`.
+1. Run `flyway info`. Look at the repeatable row: what is in its **Category** and **Version** columns?
+2. Users need a city. Add a versioned migration `migrations/V3__add_city.sql` that adds `city TEXT` to `users`
+   (Files panel: **+ New file**, type the path, write the SQL, save with **Ctrl+S**).
 3. The `active_users` view must now also show the city: change `R__active_users.sql` so the view's columns
-   are exactly `id, name, city` (in that order). Run `flyway info`: what state does the repeatable show now?
+   are exactly `id, name, city` (in that order). Open it in the Files panel, edit, **Ctrl+S**. Run `flyway info`: what state does the repeatable show now?
 4. Add a new repeatable `migrations/R__user_order_totals.sql` that creates a view `user_order_totals` with
    columns `user_id, order_total` = the sum of `orders.total` per user (one row per user that has orders).
-5. `flyway migrate` once, then `flyway info`. Query both views.
+5. `flyway migrate` once, then `flyway info`. How many rows does `R__active_users.sql` have now, and what states?
 
 **Stop:** don't edit V1/V2; don't put the view change in a new V file (the view lives in its repeatable);
 don't delete `shop.db` or rows; don't use `flyway repair`.

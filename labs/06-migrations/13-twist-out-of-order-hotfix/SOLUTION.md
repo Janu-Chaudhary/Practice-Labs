@@ -3,7 +3,13 @@
 ```bash
 cd work
 flyway info                     # 202610221500 and 202610231000: State "Ignored"
-echo Ignored > answer.txt
+```
+In the Files panel click **+ New file**, type `answer.txt`, write:
+```
+Ignored
+```
+Save with **Ctrl+S**.
+```bash
 flyway migrate
 # ERROR: Validate failed: Migrations have failed validation
 # Detected resolved migration not applied to database: 202610221500.
@@ -17,8 +23,7 @@ git commit -m "Add order notes migration (timestamp 202610271100)"
 flyway info                     # 202610221500 Ignored, 202610271100 Pending
 flyway migrate -outOfOrder=true # applies 202610221500 (out of order) and then 202610271100
 flyway info                     # 202610221500 "Out of Order", the rest Success
-sqlite3 -header -column shop.db "SELECT installed_rank, version, script FROM flyway_schema_history ORDER BY installed_rank;"
-#  1 202610201000, 2 202610251200, 3 202610221500, 4 202610271100
+#  rows in the order they ran: 202610201000, 202610251200, 202610221500 (Out of Order), 202610271100
 flyway migrate                  # up to date (no flag needed any more)
 git status                      # only answer.txt untracked
 ```

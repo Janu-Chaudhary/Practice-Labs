@@ -131,13 +131,13 @@ def test_none_is_rejected():                   <span class="c"># invalid input -
   <p>This is quiz 2 Q16 (5 marks) and Milestone 1. The checks look at commit <b>positions</b>: <code>HEAD~1</code> must contain the new test and the <i>old</i> code; <code>HEAD</code> has the fix. So the order and the "only one file per commit" rule matter.</p>
   <pre class="term"><span class="p">$</span> cat validate.py                     <span class="c"># find the bug first: len(password) &gt; 8</span>
 <span class="p">$</span> pytest                              <span class="c"># 2 passed: existing tests miss the edge</span>
-<span class="p">$</span> code test_validate.py               <span class="c"># add test_accepts_exactly_eight_characters, save</span>
+<span class="c"># Files panel: open test_validate.py, add test_accepts_exactly_eight_characters, Ctrl+S</span>
 <span class="p">$</span> pytest                              <span class="c"># 1 failed, 2 passed  -&gt; RED is what you want now</span>
 <span class="p">$</span> git status --short
  M test_validate.py
 <span class="p">$</span> git add test_validate.py            <span class="c"># ONLY the test file</span>
 <span class="p">$</span> git commit -m "Add failing test for 8-character password"
-<span class="p">$</span> code validate.py                    <span class="c"># &gt; 8   becomes   &gt;= 8</span>
+<span class="c"># Files panel: open validate.py, &gt; 8 becomes &gt;= 8, Ctrl+S</span>
 <span class="p">$</span> pytest                              <span class="c"># 3 passed -&gt; GREEN</span>
 <span class="p">$</span> git add validate.py
 <span class="p">$</span> git commit -m "Fix password length check to accept 8 characters"
@@ -246,15 +246,15 @@ def test_order_just_under_50_pays():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q16 recreation: password length</summary>
     <div class="body"><p>main has one commit "Add password length check". <code>is_valid_length("abcdefgh")</code> returns False; a password needs at least 8 chars. Make exactly two commits: a test whose message contains "failing test", then the fix. Checked: HEAD~1 test file contains "abcdefgh", HEAD~1 validate.py unchanged, 3 commits, at least 3 tests all passing.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cat validate.py                 <span class="c"># return len(password) &gt; 8</span>
-<span class="p">$</span> code test_validate.py           <span class="c"># add:</span>
-def test_accepts_exactly_eight_characters():
-    assert is_valid_length("abcdefgh") is True
-<span class="p">$</span> pytest                          <span class="c"># 1 failed, 2 passed</span>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cat validate.py                 <span class="c"># return len(password) &gt; 8</span></pre>
+<p>In the Files panel open <code>test_validate.py</code>, add at the end, save with Ctrl+S:</p>
+<pre class="term">def test_accepts_exactly_eight_characters():
+    assert is_valid_length("abcdefgh") is True</pre>
+<pre class="term"><span class="p">$</span> pytest                          <span class="c"># 1 failed, 2 passed</span>
 <span class="p">$</span> git add test_validate.py
-<span class="p">$</span> git commit -m "Add failing test for 8-character password"
-<span class="p">$</span> code validate.py                <span class="c"># &gt; 8  -&gt;  &gt;= 8</span>
-<span class="p">$</span> pytest                          <span class="c"># 3 passed</span>
+<span class="p">$</span> git commit -m "Add failing test for 8-character password"</pre>
+<p>In the Files panel open <code>validate.py</code>, change <code>&gt; 8</code> to <code>&gt;= 8</code>, save with Ctrl+S. Then:</p>
+<pre class="term"><span class="p">$</span> pytest                          <span class="c"># 3 passed</span>
 <span class="p">$</span> git add validate.py
 <span class="p">$</span> git commit -m "Fix password length check"
 <span class="p">$</span> git log --oneline               <span class="c"># 3 commits</span></pre><p>Add the test file only in commit 1, so validate.py at HEAD~1 is still the original.</p></details>
@@ -262,17 +262,17 @@ def test_accepts_exactly_eight_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Duplicate email returns 201</summary>
     <div class="body"><p><code>signup(repo, email)</code> returns 201 for a second signup with the same email; it should return 409. Tests use <code>FakeUserRepo</code>, an in-memory fake. Write the failing test and the fix as two commits. Why not use <code>Mock()</code> for the repo?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">def test_signup_rejects_duplicate_email():
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>test_signup.py</code>, add at the end, save with Ctrl+S:</p><pre class="term">def test_signup_rejects_duplicate_email():
     repo = FakeUserRepo()
     signup(repo, "user@example.com")
     status = signup(repo, "user@example.com")
     assert status == 409
-    assert repo.count() == 1
-<span class="p">$</span> pytest ; git add test_signup.py ; git commit -m "Add failing test for duplicate email signup"
-<span class="c"># signup.py, before repo.save(email):</span>
-    if repo.find(email) is not None:
-        return 409
-<span class="p">$</span> pytest ; git add signup.py ; git commit -m "Return 409 for duplicate email"</pre><p>A Mock stores nothing, so <code>find</code> never sees the first user; you could only assert "save was called". The fake really stores users, so the test checks the behaviour.</p></details>
+    assert repo.count() == 1</pre>
+<pre class="term"><span class="p">$</span> pytest ; git add test_signup.py ; git commit -m "Add failing test for duplicate email signup"</pre>
+<p>In the Files panel open <code>signup.py</code>, add these two lines inside <code>signup</code>, just before <code>repo.save(email)</code>, save with Ctrl+S:</p>
+<pre class="term">    if repo.find(email) is not None:
+        return 409</pre>
+<pre class="term"><span class="p">$</span> pytest ; git add signup.py ; git commit -m "Return 409 for duplicate email"</pre><p>A Mock stores nothing, so <code>find</code> never sees the first user; you could only assert "save was called". The fake really stores users, so the test checks the behaviour.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Oops, a third commit</summary>
@@ -285,20 +285,20 @@ def test_accepts_exactly_eight_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> PR merged with failing tests</summary>
     <div class="body"><p>The workflow has <code>on: push: branches: [main]</code> and the test step has <code>continue-on-error: true</code>. A PR with a failing test showed no checks and was merged. Fix the YAML, and say what else must change outside the file.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">on:
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>.github/workflows/ci.yml</code>, make these parts read as below, save with Ctrl+S:</p><pre class="term">on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 ...
       - name: Run unit tests
-        run: pytest -q            <span class="c"># continue-on-error removed</span>
-<span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Run CI on pull requests to main"</pre><p>Outside YAML: in GitHub's branch protection / ruleset for main, make the job <code>test</code> a required status check. Trigger + rule = merge gate.</p></details>
+        run: pytest -q            <span class="c"># continue-on-error removed</span></pre>
+<pre class="term"><span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Run CI on pull requests to main"</pre><p>Outside YAML: in GitHub's branch protection / ruleset for main, make the job <code>test</code> a required status check. Trigger + rule = merge gate.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> The surviving mutant</summary>
     <div class="body"><p>Code is <code>return len(pw) &gt;= 8</code>. Tests check "abc" (False) and a 19-char password (True). A mutation tool reports: mutant <code>&gt;= 8 -&gt; &gt; 8</code> SURVIVED, mutant <code>&gt;= 8 -&gt; &gt;= 7</code> SURVIVED. Which tests kill them? Does the code need a fix?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">def test_accepts_exactly_eight_characters():
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open the test file, add these two tests, save with Ctrl+S:</p><pre class="term">def test_accepts_exactly_eight_characters():
     assert is_valid_length("abcdefgh") is True    <span class="c"># kills &gt; 8</span>
 
 def test_rejects_seven_characters():
@@ -315,8 +315,12 @@ def test_rejects_seven_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: which of 8 commits broke it? (git bisect)</summary>
     <div class="body"><p>Rule: 10 or more items get 10% off. Tag <code>v1.0</code> was right; 8 commits later, exactly 10 items get no discount, and CI is green (tests only use 3 and 20 items). Find the first bad commit without reading every diff, then do the usual failing-test + fix pair. Where do you put the test while bisecting, and why?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> code test_regression.py         <span class="c"># NEW untracked file: assert bulk_discount(10) == 0.10</span>
-<span class="p">$</span> pytest -q                       <span class="c"># 1 failed: bug reproduced</span>
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel click <b>+ New file</b>, type <code>test_regression.py</code> (a NEW, untracked file), make it read, save with Ctrl+S:</p><pre class="term">from pricing import bulk_discount
+
+
+def test_exactly_ten_items_get_discount():
+    assert bulk_discount(10) == 0.10</pre>
+<pre class="term"><span class="p">$</span> pytest -q                       <span class="c"># 1 failed: bug reproduced</span>
 <span class="p">$</span> git bisect start
 <span class="p">$</span> git bisect bad                  <span class="c"># HEAD is bad</span>
 <span class="p">$</span> git bisect good v1.0            <span class="c"># this one was good; git checks out the middle</span>
@@ -325,13 +329,13 @@ e660570... is the first bad commit
     Tidy pricing code              <span class="c"># qty &gt;= BULK_MIN became qty &gt; BULK_MIN</span>
 <span class="p">$</span> git bisect reset                <span class="c"># back on main (else you stay on a detached HEAD)</span>
 <span class="p">$</span> git add test_regression.py ; git commit -m "Add failing test for exactly 10 items"
-<span class="p">$</span> code pricing.py                 <span class="c"># &gt;  -&gt;  &gt;=</span>
+<span class="c"># Files panel: open pricing.py, qty &gt; BULK_MIN becomes qty &gt;= BULK_MIN, Ctrl+S</span>
 <span class="p">$</span> pytest -q ; git add pricing.py ; git commit -m "Fix bulk discount for 10 items"</pre><p><code>git bisect run</code> reads the exit code: 0 = good, 1 = bad (125 = skip). An <b>untracked</b> test file stays put while bisect checks out old commits; editing a tracked test file first makes the checkout refuse ("local changes would be overwritten"). Binary search: 8 commits need only about 3 test runs. Without <code>run</code>, test each step yourself and type <code>git bisect good</code> or <code>git bisect bad</code>.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: one table of boundary tests (parametrize)</summary>
     <div class="body"><p>Ticket prices: 0-4 free, 5-17 = 8, 18-64 = 15, 65-120 = 10, below 0 or above 120 = <code>ValueError</code>. Write the fewest test functions that check both sides of every edge and both invalid edges. Which ages, and what does a failing row look like?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">import pytest
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>test_tickets.py</code>, add this (keep the old tests), save with Ctrl+S:</p><pre class="term">import pytest
 from tickets import ticket_price
 
 @pytest.mark.parametrize("age, expected", [
@@ -342,8 +346,8 @@ def test_price(age, expected):
 @pytest.mark.parametrize("age", [-1, 121])
 def test_invalid_age(age):
     with pytest.raises(ValueError):
-        ticket_price(age)
-<span class="p">$</span> pytest -v
+        ticket_price(age)</pre>
+<pre class="term"><span class="p">$</span> pytest -v
 test_tickets.py::test_price[65-10] FAILED       <span class="c"># each row is its own test, with its values in the id</span></pre><p>The names are ONE string <code>"age, expected"</code>; each tuple is one run. Every edge needs the last value inside AND the first value outside (64 and 65; 120 and 121), or a <code>&lt;</code>/<code>&lt;=</code> slip survives.</p></details>
     </div></details>
 
@@ -368,11 +372,12 @@ def test_shop_is_closed_at_2am():
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Hard: write the whole CI workflow, with a lint gate</summary>
     <div class="body"><p>No CI exists. Write <code>.github/workflows/ci.yml</code>: on pull requests to main and pushes to main, job <code>build-and-test</code> must install, lint with <code>ruff check .</code>, then run <code>pytest</code>. <code>requirements.txt</code> only lists <code>pytest</code>, and <code>ruff check .</code> currently reports 2 errors. What do you commit, in which order?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> ruff check .                 <span class="c"># fix both errors in the code first</span>
-<span class="p">$</span> echo ruff &gt;&gt; requirements.txt  <span class="c"># the runner is a clean VM: no ruff unless installed</span>
-<span class="p">$</span> git add temps.py requirements.txt ; git commit -m "Fix lint errors, add ruff"
-<span class="p">$</span> mkdir -p .github/workflows ; code .github/workflows/ci.yml
-name: CI
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> ruff check .                 <span class="c"># read the 2 errors</span></pre>
+<p>In the Files panel fix both errors in <code>temps.py</code>, then open <code>requirements.txt</code> and add a line <code>ruff</code> (the runner is a clean VM: no ruff unless installed). Save each with Ctrl+S.</p>
+<pre class="term"><span class="p">$</span> ruff check . ; pytest -q
+<span class="p">$</span> git add temps.py requirements.txt ; git commit -m "Fix lint errors, add ruff"</pre>
+<p>Click <b>+ New file</b>, type <code>.github/workflows/ci.yml</code> (the folders are created for you), make it read, save with Ctrl+S:</p>
+<pre class="term">name: CI
 on:
   pull_request:
     branches: [main]
@@ -388,8 +393,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: ruff check .         <span class="c"># exit 1 on findings = red job</span>
-      - run: pytest
-<span class="p">$</span> python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"
+      - run: pytest</pre>
+<pre class="term"><span class="p">$</span> python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"
 <span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Add CI workflow"</pre><p>Lint fix first, so the workflow's first run is green. No <code>continue-on-error</code> and no <code>|| true</code>: either makes a failing step count as success. Missing ruff in requirements = "ruff: command not found" (exit 127) on CI even though it works on your laptop. <code>ruff check . --fix</code> removes an unused import, but not an unused variable (an "unsafe" fix): edit that yourself.</p></details>
     </div></details>
 

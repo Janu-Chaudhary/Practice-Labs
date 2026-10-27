@@ -5,8 +5,16 @@
 git switch --detach v1.0          # or: git checkout v1.0   -> "You are in 'detached HEAD' state"
 git status                        # HEAD detached at v1.0
 cat config.py                     # RETRIES = 0
-code config.py                    # make it RETRIES = 3, save
-#   no-editor equivalent:  echo "RETRIES = 3" > config.py
+```
+
+Editor: open `config.py` in the Files panel, change `0` to `3`, save with Ctrl+S. The file must be exactly:
+```python
+RETRIES = 3
+```
+Why now: you are on v1.0's commit, so the fix is made on top of the old release, not on main.
+
+```bash
+git diff                          # -RETRIES = 0  +RETRIES = 3
 git commit -am "Fix retries for 1.0"   # commit on top of v1.0 (still detached)
 git switch -c v1-hotfix           # create a branch HERE and switch to it: the commit is now saved
 git log --oneline --graph --all --decorate
@@ -34,10 +42,20 @@ git cat-file -p main^{tree}       # one line per file: mode, type, hash, name
 #   100644 blob 9d4b...  banner.txt
 #   ...
 #   100644 blob 9d4b...  motd.txt      <- same hash as banner.txt (line 3)
-echo "$(git rev-parse v1-hotfix^{tree})" > answers.txt
-echo "tag" >> answers.txt
-echo "motd.txt" >> answers.txt
-cat answers.txt
+```
+
+Editor: Files panel -> **+ New file** -> `answers.txt`. Paste the tree hash from `git rev-parse` on
+line 1 (select it in the terminal and copy), then type the other two answers. Save with Ctrl+S.
+It looks like this (your hash differs):
+```
+3f9c2a7d1e...      <- the full tree hash, or at least its first 7 characters
+tag
+motd.txt
+```
+
+```bash
+cat answers.txt                   # check the three lines
+git status                        # still clean: answers.txt is git-ignored
 ```
 
 Why:

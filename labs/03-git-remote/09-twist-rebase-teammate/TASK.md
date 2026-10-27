@@ -20,7 +20,8 @@ Team rule: main must stay **linear: no merge commits**.
 **Task:**
 1. Try `git push`, read the rejection.
 2. Put your commit on top of the teammate's commit **with a rebase**, not a merge.
-3. You will hit a conflict in routes.txt. Resolve it so the file is exactly:
+3. You will hit a conflict in routes.txt. Open it in the Files panel, remove the conflict markers so
+   the file is exactly this, and save with Ctrl+S:
    ```
    GET /orders
    GET /health
@@ -31,8 +32,8 @@ Team rule: main must stay **linear: no merge commits**.
 **Stop:** no force push, no merge commit, make no other commits.
 
 **Hints:** `git pull --rebase` = fetch + rebase onto origin/main. During a rebase conflict:
-edit the file, `git add` it, then `git rebase --continue` (it may open an editor for the commit
-message: save and close). Panic button: `git rebase --abort` puts everything back.
+fix the file in the Files panel and save, `git add` it, then `git rebase --continue` (it may open
+an editor **in the terminal** for the commit message: in vim type `:wq` and Enter). Panic button: `git rebase --abort` puts everything back.
 
 **What will be checked**
 - teammate's "Add health endpoint" kept as-is

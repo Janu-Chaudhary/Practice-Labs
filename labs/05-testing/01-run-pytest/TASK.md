@@ -13,7 +13,8 @@ Before fixing anything, you must be able to read what pytest tells you.
    - line 3: how many tests **passed**
    - line 4: the value that `total_with_tax([100])` **actually** returned (read it from the `assert ... == ...` line)
 
-Edit `answer.txt` with `code answer.txt` or `nano answer.txt`, or use `echo`/`printf` with `>`.
+Create `answer.txt` in the Files panel: click **+ New file**, type `answer.txt`, write the 4 lines,
+save with Ctrl+S.
 
 ## Stop
 - Do NOT change `cart.py` or `test_cart.py`. This lab is only about reading output.

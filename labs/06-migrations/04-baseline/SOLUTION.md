@@ -6,9 +6,9 @@ flyway migrate
 # ERROR: Found non-empty schema(s) "main" but no schema history table.
 #        Use baseline() or set baselineOnMigrate to true to initialize the schema history table.
 flyway baseline -baselineVersion=02     # create flyway_schema_history with a BASELINE row "02"
-flyway info                             # 01 Below Baseline, 02 Baseline, 03 Pending
+flyway info                             # 01 Below Baseline, 02 file "Ignored (Baseline)" + a BASELINE row, 03 Pending
 flyway migrate                          # runs only 03
-sqlite3 -header -column shop.db "SELECT * FROM orders;"   # currency = INR on all 3 rows
+flyway info                             # 03 Success, Schema version: 03 (no rows ran 01 or 02)
 ```
 
 Why the error? Flyway refuses to run 01 (`CREATE TABLE orders`) on a database that already has

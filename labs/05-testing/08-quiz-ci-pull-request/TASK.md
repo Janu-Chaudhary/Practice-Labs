@@ -6,11 +6,11 @@ failing test: GitHub showed **no checks** on the PR, a reviewer merged it, and m
 Also, someone added `continue-on-error: true` to the test step "to make CI green".
 
 ## Task
-Edit `.github/workflows/ci.yml` (`code .github/workflows/ci.yml`):
+Open `.github/workflows/ci.yml` in the Files panel (save with Ctrl+S when done):
 1. Add a `pull_request` trigger for `main` (keep the push trigger).
 2. Make a failing test fail the job again.
 3. Commit the change (one commit, any message).
-4. Create `answer.txt` with one line: the **job id** you would select as the *required status check*
+4. Create `answer.txt` (Files panel, **+ New file**) with one line: the **job id** you would select as the *required status check*
    in GitHub's branch protection rules. (That part is a GitHub setting, not YAML. You can't do it here.)
 
 Careful: YAML indentation is spaces only, and siblings must line up exactly.

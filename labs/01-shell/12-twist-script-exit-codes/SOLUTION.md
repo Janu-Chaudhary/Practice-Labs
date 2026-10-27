@@ -45,5 +45,5 @@ Other ways that also pass:
 - `echo 'down: $(wc -l < reports/errors.txt)'` -> single quotes: the file gets the text `$(wc ...)` literally.
 - `echo "down: $(wc -l reports/errors.txt)"` -> `down: 2 reports/errors.txt` (wc adds the file name).
 - `... && echo ... > status.txt` -> `>` wipes the 2 old lines. Logs are appended with `>>`.
-- Running step 6 twice -> two ALERT lines. If it happens, open `status.txt` in an editor and delete the extra
-  line, or run `./setup.sh` in the lab folder to start over (that resets everything).
+- Running step 6 twice -> two ALERT lines. If it happens, open `status.txt` in the Files panel, delete the extra
+  line, save with Ctrl+S; or run `./setup.sh` in the lab folder to start over (that resets everything).

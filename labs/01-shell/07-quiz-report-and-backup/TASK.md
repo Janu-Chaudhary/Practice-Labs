@@ -11,7 +11,8 @@ There is no `reports` folder and no `backup` folder yet.
 1. Create `reports/problems.txt` with every `WARN` **or** `ERROR` line from `logs/app.log`, in log order.
 2. Create `reports/error-count.txt` holding only the **number** of `level=ERROR` lines.
 3. Copy `logs/app.log` into a new folder `backup`, named `app-2026-10-25.log`.
-4. Add this line to the **end** of `notes.txt` (keep the existing lines):
+4. In the Files panel open `notes.txt` and add this line at the **end** (keep the existing lines),
+   then save with Ctrl+S:
    ```
    2026-10-25 checked by me
    ```

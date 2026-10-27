@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/../../lib/common.sh"
 same() { cmp -s "$1" <(printf '%s\n' "${@:2}"); }
+# edited in the editor: a missing newline after the last line is fine
+typed() { [ -f "$1" ] && [ "$(cat "$1")" = "$(printf '%s\n' "${@:2}")" ]; }
 L=(
   '2026-10-25T07:59:58 level=INFO service=api msg="boot"'
   '2026-10-25T08:00:12 level=WARN service=db msg="pool at 90%"'
@@ -17,7 +19,8 @@ check "reports/problems.txt = the 4 WARN/ERROR lines"      'same reports/problem
 grep -q DEBUG "$WORK/reports/problems.txt" 2>/dev/null && hint "the DEBUG line got in: match 'level=ERROR', not just 'ERROR'"
 check "reports/error-count.txt holds just 2"               'same reports/error-count.txt 2'
 check "backup/app-2026-10-25.log is an identical copy"     'same backup/app-2026-10-25.log "${L[@]}"'
-check "notes.txt = 2 old lines + '2026-10-25 checked by me'" 'same notes.txt "On-call notes" "2026-10-24 checked by Sam" "2026-10-25 checked by me"'
-[ -f "$WORK/notes.txt" ] && [ "$(wc -l < "$WORK/notes.txt")" = 1 ] && hint "notes.txt lost its old lines: use >> (append), not >"
+check "notes.txt = 2 old lines + '2026-10-25 checked by me'" 'typed notes.txt "On-call notes" "2026-10-24 checked by Sam" "2026-10-25 checked by me"'
+[ -f "$WORK/notes.txt" ] && ! grep -q "checked by Sam" "$WORK/notes.txt" && hint "notes.txt lost its old lines: keep them and add the new line at the end"
+[ -f "$WORK/notes.txt" ] && ! grep -q "checked by me" "$WORK/notes.txt" && hint "the new line is missing: did you save notes.txt with Ctrl+S?"
 check "logs/app.log is unchanged and still in logs/"       'same logs/app.log "${L[@]}"'
 summary

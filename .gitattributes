@@ -1,0 +1,5 @@
+# keep Linux line endings even when cloned on Windows (bash breaks on CRLF)
+*.sh text eol=lf
+labs/bin/* text eol=lf
+*.py text eol=lf
+*.sql text eol=lf

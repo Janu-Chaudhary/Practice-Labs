@@ -18,6 +18,8 @@ commit), don't delete `shop.db` or any users.
 **Hints**
 - Old version of a file: `git show HEAD~1:migrations/02_add_billing.up.sql`, or put it back with
   `git restore --source=HEAD~1 migrations/02_add_billing.up.sql`.
+- Create the 03 files in the Files panel: **+ New file**, type the path (`migrations/03_...`), write the
+  SQL, save with **Ctrl+S**.
 - `git revert HEAD --no-edit` undoes a whole commit with a NEW commit (history is kept).
 
 **What will be checked**

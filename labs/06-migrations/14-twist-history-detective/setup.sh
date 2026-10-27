@@ -25,6 +25,7 @@ fw migrate
 #  - 04 arrived late from a teammate and was applied out of order
 echo "CREATE INDEX idx_orders_user ON orders (user_id);" > $M/04_index_orders.up.sql
 echo "DROP INDEX idx_orders_user;" > $M/04_index_orders.down.sql
+sleep 1   # so "Installed On" in flyway info clearly shows 04 ran later
 fw migrate -outOfOrder=true
 sqlite3 shop.db "INSERT INTO orders VALUES (1,1,250),(2,2,400),(3,1,999);"
 git add . && git commit -q -m "Migrations 01-05"

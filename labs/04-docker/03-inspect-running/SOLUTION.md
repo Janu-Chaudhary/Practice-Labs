@@ -8,8 +8,16 @@ docker exec notes-api cat /tmp/motd.txt     # e.g. maple-12345 -> motd=maple-123
 docker exec notes-api ps                    # PID 1 is "node server.js" (PID namespace)
 docker top notes-api                        # same process, host PID in the PID column -> hostpid=
 docker inspect -f '{{.State.Pid}}' notes-api   # same host PID, directly
-code answers.txt                            # write the 4 lines, save
 ```
+In the Files panel open `answers.txt` and make it read (with YOUR values):
+```
+port=49153
+token=1a2b3c4d
+motd=maple-12345
+hostpid=809000
+```
+Save with Ctrl+S. Why: the answers are just text; the skill here is the docker commands that find them.
+
 Why two PIDs: a PID namespace gives the container its own numbering (it sees itself as PID 1).
 The host sees the same process under an ordinary PID. Namespaces = what you can see.
 

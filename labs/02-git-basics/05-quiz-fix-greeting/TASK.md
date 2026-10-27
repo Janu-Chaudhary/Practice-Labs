@@ -19,7 +19,7 @@ modified or untracked. There are no other branches, and nothing has been pushed.
 
 ## Task
 1. Create a branch called `fix-greeting` from main and switch to it.
-2. Change greet.py (in your editor: `code greet.py` or `nano greet.py`) so that it is exactly (type it, no copy):
+2. In the Files panel open `greet.py` and change it so that it is exactly this (type it, no copy), then save with Ctrl+S:
    ```python
    def greet(name):
        return f"Hello, {name}!"

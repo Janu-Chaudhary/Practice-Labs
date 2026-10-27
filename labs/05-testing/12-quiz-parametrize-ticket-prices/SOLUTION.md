@@ -1,6 +1,6 @@
 # Solution - 12-quiz-parametrize-ticket-prices
 
-Replace `test_tickets.py` with (`code test_tickets.py`):
+In the Files panel open `test_tickets.py` and make it read:
 ```python
 import pytest
 from tickets import ticket_price
@@ -29,14 +29,36 @@ def test_invalid_age_raises(age):
     with pytest.raises(ValueError):
         ticket_price(age)
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest -v          # 12 lines; FAILED: [65-10] (got 15), [120-10] (ValueError raised)
 git add test_tickets.py
 git commit -m "Add failing test table for ticket price boundaries"
 ```
-Fix `tickets.py`: `age >= 120` -> `age > 120`, and `age <= 65` -> `age < 65`.
+Fix `tickets.py`: in the Files panel open it and change `age >= 120` -> `age > 120`, and
+`age <= 65` -> `age < 65`, so it reads:
+```python
+def ticket_price(age):
+    """Cinema ticket price in dollars.
+
+    age 0-4    -> 0  (free)
+    age 5-17   -> 8  (child)
+    age 18-64  -> 15 (adult)
+    age 65-120 -> 10 (senior)
+    age below 0 or above 120 -> ValueError
+    """
+    if age < 0 or age > 120:
+        raise ValueError("age must be between 0 and 120")
+    if age < 5:
+        return 0
+    if age < 18:
+        return 8
+    if age < 65:
+        return 15
+    return 10
+```
+Save with Ctrl+S. Then:
 ```bash
-sed -i -e 's/age >= 120/age > 120/' -e 's/age <= 65/age < 65/' tickets.py
 pytest -v          # 12 passed
 git add tickets.py
 git commit -m "Fix ticket price edges at 65 and 120"

@@ -11,8 +11,18 @@ flyway migrate
 git log --oneline                      # teammate's "Fix billing migration" on top
 git diff HEAD~1 HEAD                   # 02 gained the billing_email line
 git restore --source=HEAD~1 migrations/02_add_billing.up.sql migrations/02_add_billing.down.sql   # 02 back to applied version
-echo "ALTER TABLE users ADD COLUMN billing_email TEXT;" > migrations/03_add_billing_email.up.sql
-echo "ALTER TABLE users DROP COLUMN billing_email;"     > migrations/03_add_billing_email.down.sql
+git status --short                     # M for both 02 files: they now differ from the teammate's HEAD
+```
+In the Files panel click **+ New file**, type `migrations/03_add_billing_email.up.sql`, write:
+```sql
+ALTER TABLE users ADD COLUMN billing_email TEXT;
+```
+Save with **Ctrl+S**. Then **+ New file** `migrations/03_add_billing_email.down.sql`:
+```sql
+ALTER TABLE users DROP COLUMN billing_email;
+```
+Save with **Ctrl+S**.
+```bash
 flyway migrate                         # validate OK now; applies 03 only
 flyway info                            # 01 02 03 Success
 git add -A

@@ -277,8 +277,7 @@ CMD ["node", "server.js"]
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Up, published, still unreachable</summary>
     <div class="body"><p><code>docker run -d -p 8080:3000 --name web app:1.0</code>. <code>docker ps</code> shows <code>0.0.0.0:8080-&gt;3000/tcp</code>, but <code>curl localhost:8080</code> gets an empty reply. <code>docker logs web</code> says <code>listening on 127.0.0.1:3000</code>. Fix it.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="c"># in server.js: .listen(3000, "0.0.0.0")</span>
-<span class="p">$</span> docker build -t app:1.1 .
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>server.js</code>, change the listen line to <code>.listen(3000, "0.0.0.0")</code> and save with Ctrl+S. Then:</p><pre class="term"><span class="p">$</span> docker build -t app:1.1 .
 <span class="p">$</span> docker rm -f web
 <span class="p">$</span> docker run -d -p 8080:3000 --name web app:1.1
 <span class="p">$</span> curl localhost:8080</pre><p>127.0.0.1 inside the container is the container's own loopback. A new image needs a new container: restart would reuse the old image.</p></details>
@@ -299,10 +298,13 @@ CMD ["node", "server.js"]
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The password is in the image</summary>
     <div class="body"><p>A teammate's Dockerfile has <code>ENV DB_PASSWORD=Summer2024!</code> and <code>COPY . .</code>, and there is no <code>.dockerignore</code>. The project folder has a <code>.env</code> with <code>DB_HOST</code> and <code>DB_PASSWORD</code>. They built <code>pay:1.0</code>. (a) Show two ways to read the password from the image. (b) Fix the build and build <code>pay:1.1</code>. (c) Run it as <code>pay</code> on host 8080 -&gt; 3000 with the settings from <code>.env</code>, using one flag. (d) Remove the leaky tag.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker history --no-trunc pay:1.0 | grep ENV      <span class="c"># ENV DB_PASSWORD=Summer2024!</span>
-<span class="p">$</span> docker run --rm pay:1.0 cat /app/.env              <span class="c"># COPY . . copied .env in</span>
-<span class="c"># delete the ENV DB_... lines from the Dockerfile, then:</span>
-<span class="p">$</span> printf '.env\nnode_modules\n.git\n' &gt; .dockerignore
-<span class="p">$</span> docker build -t pay:1.1 .
+<span class="p">$</span> docker run --rm pay:1.0 cat /app/.env              <span class="c"># COPY . . copied .env in</span></pre>
+<p>In the Files panel open <code>Dockerfile</code>, delete the two <code>ENV DB_...</code> lines, save with Ctrl+S. Click <b>+ New file</b>, type <code>.dockerignore</code>, make it read:</p>
+<pre class="term">.env
+node_modules
+.git</pre>
+<p>Save with Ctrl+S. Then in the terminal:</p>
+<pre class="term"><span class="p">$</span> docker build -t pay:1.1 .
 <span class="p">$</span> docker run -d --name pay -p 8080:3000 --env-file .env pay:1.1
 <span class="p">$</span> docker image rm pay:1.0</pre><p><code>ENV</code> (and <code>ARG</code>) values are recorded in the image metadata and in <code>docker history</code>. <code>COPY . .</code> copies everything in the build context that <code>.dockerignore</code> doesn't exclude. A later <code>RUN rm .env</code> doesn't help: the file stays in the earlier layer. Config and secrets go in the environment at run time (<code>--env-file</code> or <code>-e</code>), so one image runs anywhere. Lab 10.</p></details>
     </div></details>
@@ -323,20 +325,25 @@ CMD ["node", "server.js"]
 <span class="p">$</span> docker inspect -f '{{.State.ExitCode}}' report  <span class="c"># 3</span>
 <span class="p">$</span> docker rm report
 <span class="p">$</span> docker run -d --name report -p 8112:3000 -v "$(pwd)/config":/config:ro report:1.0
-<span class="c"># (c) after editing config/settings.json on the host:</span>
+<span class="c"># (c) after editing config/settings.json in the Files panel (it is the host file) and saving:</span>
 <span class="p">$</span> docker restart report</pre><p><code>-d</code> only says the container started; the main process exiting ends it. Logs survive on stopped containers. A left side starting with <code>/</code> is a <b>bind mount</b> (a host folder you choose); <code>-v config:/config</code> would create an empty <b>named volume</b> instead. The container sees the edited file immediately, but this app reads it only at start, so restart. Mounts can't be added to an existing container: rm + run. Lab 12.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Prove the cache, then retag</summary>
     <div class="body"><p>The Dockerfile is <code>FROM / WORKDIR /app / COPY . . / RUN npm ci / CMD</code>, and the folder has a 30 MB <code>logs/</code> and a laptop <code>node_modules/</code>. Make server.js edits skip npm ci (you may add lines), keep the junk out, build <code>shop:1.2</code> saving the plain build output to <code>build.log</code> (and on screen), point <code>shop:latest</code> at 1.2 without rebuilding, and delete <code>shop:1.0</code>.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">FROM node:24-alpine
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>Dockerfile</code>, make it read:</p><pre class="term">FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY . .
-CMD ["node", "server.js"]
-<span class="p">$</span> printf 'logs\nnode_modules\n.git\n.env\n' &gt; .dockerignore
-<span class="p">$</span> docker build --progress=plain -t shop:1.2 . 2&gt;&amp;1 | tee build.log
+CMD ["node", "server.js"]</pre>
+<p>Save with Ctrl+S. Click <b>+ New file</b>, type <code>.dockerignore</code>, make it read:</p>
+<pre class="term">logs
+node_modules
+.git
+.env</pre>
+<p>Save with Ctrl+S. Then in the terminal:</p>
+<pre class="term"><span class="p">$</span> docker build --progress=plain -t shop:1.2 . 2&gt;&amp;1 | tee build.log
 #8 [4/5] RUN npm ci --omit=dev
 #8 CACHED
 <span class="p">$</span> docker tag shop:1.2 shop:latest

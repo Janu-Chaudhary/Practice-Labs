@@ -15,15 +15,17 @@ as separate migrations, applied **in stages**:
    Its reverse `04_drop_user_name.down.sql` must be a **deliberate repair**: re-add `user_name` **and copy
    the names back** from `full_name` (a plain ADD COLUMN would give NULLs).
 
-**Stop:** don't edit 01; don't run down files on `shop.db`.
+**Stop:** don't edit 01; don't edit a migration after it ran (write the next one instead).
 
 **Hints**
 - Apply up to a version: `flyway migrate -target=02`. Then `flyway info` shows 03/04 still Pending if they exist.
 - A down file may hold several statements, each ending in `;`.
-- After step 1, check `SELECT * FROM users;` - full_name NULL everywhere; after step 2 - filled.
+- Write each file in the Files panel: **+ New file**, type the path (`migrations/02_add_full_name.up.sql`),
+  write the SQL, save with **Ctrl+S**. Write a stage's files, migrate, then write the next stage's files.
+- After each stage, `flyway info` shows what is applied (Success) and what is not (Pending).
 
 **What will be checked**
 - history has 02, 03, 04 with those exact file names; `flyway validate` passes
 - users = `id, full_name` with all 3 names
-- 02 and 04 down files exist; on a copy, 04.down gives `user_name` = `full_name` for every row,
+- 02 and 04 down files exist; the checker runs them on a **copy** of `shop.db`: 04.down gives `user_name` = `full_name` for every row,
   then 02.down leaves `id, user_name` with the names

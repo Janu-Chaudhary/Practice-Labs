@@ -215,13 +215,13 @@ details.answer[open]{background:var(--bg)}
   </ol>
 
   <h3 class="sub" id="start-tool">The Lab Practice Tool (quiz-style screen)</h3>
-  <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
+  <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to open, create and edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
   <pre class="term"><span class="p">$</span> cd Practice-Labs         <span class="c"># the folder you cloned (wherever it lives)</span>
 <span class="p">$</span> ./start-lab-tool.sh
 <span class="c"># opens http://127.0.0.1:8765 in your browser. Leave this terminal open; Ctrl+C stops the tool.</span></pre>
   <ol class="steps">
     <li>Pick a lab on the left. Its <code>work/</code> folder is built automatically the first time.</li>
-    <li>Read the task. Edit files in the panel (<kbd>Ctrl</kbd>+<kbd>S</kbd> saves) and type commands in the terminal.</li>
+    <li>Read the task. Edit files in the Files panel, like the quiz: click a file to open it, <b>+ New file</b> creates one (e.g. <code>migrations/03_add_x.sql</code>), <kbd>Ctrl</kbd>+<kbd>S</kbd> saves. Type only commands (git, docker, flyway, pytest…) in the terminal.</li>
     <li>Press <b>✓ Check</b>. Passed labs get a ✓ in the list.</li>
     <li>Press <b>↺ Reset lab</b> to start that lab over, then solve it again from memory.</li>
   </ol>
@@ -230,7 +230,7 @@ details.answer[open]{background:var(--bg)}
   </div>
 
   <h3 class="sub" id="start-labs">Running a lab from your own terminal</h3>
-  <p>You can also do every lab in a normal terminal or VS Code. Every lab is a folder with four files:</p>
+  <p>You can also do every lab in a normal terminal, editing files in any editor. Every lab is a folder with four files:</p>
   <div class="grid2">
     <div class="card"><h4><code>TASK.md</code></h4>The situation and the task, worded like the quiz. Read it first.</div>
     <div class="card"><h4><code>setup.sh</code></h4>Builds a fresh <code>work/</code> folder with the scenario. Run it again any time to start over.</div>
@@ -238,7 +238,7 @@ details.answer[open]{background:var(--bg)}
     <div class="card"><h4><code>SOLUTION.md</code></h4>The exact commands with a why for each, and common wrong attempts. Open it only after trying.</div>
   </div>
   <pre class="term"><span class="p">$</span> cd labs/01-shell/01-files-and-folders   <span class="c"># from the Practice-Labs folder</span>
-<span class="p">$</span> cat TASK.md            <span class="c"># or: code TASK.md  (opens in VS Code)</span>
+<span class="p">$</span> cat TASK.md            <span class="c"># read the task</span>
 <span class="p">$</span> ./setup.sh             <span class="c"># builds work/ fresh</span>
 <span class="p">$</span> cd work                <span class="c"># you solve the task in here</span>
 <span class="c">#   ... your commands ...</span>
@@ -279,7 +279,7 @@ details.answer[open]{background:var(--bg)}
     <tr><td><code>clear</code> or <kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Clears the screen.</td></tr>
     <tr><td><code>pwd</code></td><td>Prints where you are. Check this whenever a path "doesn't exist".</td></tr>
     <tr><td><code>cmd --help</code></td><td>Shows a command's options. The quiz allows this, so use it.</td></tr>
-    <tr><td><code>code file</code></td><td>Opens a file in VS Code. This stands in for the quiz's file panel.</td></tr>
+    <tr><td><code>cat file</code></td><td>Prints a file so you can read it in the terminal. To <i>change</i> a file, use the Files panel instead.</td></tr>
   </tbody></table>
 
   <h3 class="sub" id="start-editors">Stuck inside an editor? (the merge-commit trap)</h3>
@@ -395,16 +395,18 @@ drwxr-xr-x 2 student student 4096 Sep 28 09:00 logs
     <tr><td><code>cmd &gt;&gt; f</code></td><td>add output to the <b>end</b> of f (creates it if missing). Keeps what was there</td></tr>
     <tr><td><code>cmd &lt; f</code></td><td>feed file f as the input</td></tr>
     <tr><td><code>cmd1 | cmd2</code></td><td>pipe: cmd1's output becomes cmd2's input. No file in between</td></tr>
-    <tr><td><code>echo "text" &gt; f</code></td><td>write one line. <code>echo</code> just prints its arguments + a newline</td></tr>
+    <tr><td><code>echo "text"</code></td><td>just prints its arguments + a newline. Useful to save a value a command worked out, e.g. <code>echo $? &gt; code.txt</code> (see exit codes below)</td></tr>
   </tbody></table>
-  <pre class="term"><span class="p">$</span> echo "first line" &gt; hello.txt
-<span class="p">$</span> echo "second line" &gt;&gt; hello.txt
-<span class="p">$</span> cat hello.txt
-first line
-second line
-<span class="p">$</span> echo "oops" &gt; hello.txt     <span class="c"># &gt; starts from empty again</span>
-<span class="p">$</span> cat hello.txt
-oops</pre>
+  <pre class="term"><span class="p">$</span> head -n 2 visitors.txt &gt; some.txt    <span class="c"># first 2 lines into a new file</span>
+<span class="p">$</span> tail -n 1 visitors.txt &gt;&gt; some.txt   <span class="c"># &gt;&gt; adds the last line at the end</span>
+<span class="p">$</span> cat some.txt
+maya
+liam
+ben
+<span class="p">$</span> tail -n 1 visitors.txt &gt; some.txt    <span class="c"># &gt; starts from empty again</span>
+<span class="p">$</span> cat some.txt
+ben</pre>
+  <div class="callout tip"><strong>Terminal or editor?</strong><p>Rule of thumb: content <b>produced by a command</b> (grep, sort, wc, ls ...) is saved with <code>&gt;</code> / <code>&gt;&gt;</code> in the terminal. Text <b>you type yourself</b> (a note, a config line, a new file) goes in the editor: in the Files panel open the file, or click <b>+ New file</b> and type a path like <code>notes/todo.txt</code> (folders are created), then save with <code>Ctrl+S</code>. The quiz portal works the same way.</p></div>
   <p><b>Quoting.</b> The shell splits your line on spaces and treats <code>| &gt; &lt; * $</code> as special. Put patterns in <b>single quotes</b>
   (<code>'method=(GET|DELETE)'</code>) so the shell passes them to grep untouched. Double quotes also protect spaces and <code>|</code> but still expand <code>$var</code>.</p>
   <div class="callout why"><strong>Why "redirect into a missing folder" fails</strong><p>
@@ -550,7 +552,9 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Back up a folder and add a note</summary>
     <div class="body"><p>Copy the whole <code>config</code> folder to <code>config-backup</code>, then add the line <code>backup done</code> to the end of <code>CHANGELOG.txt</code> without losing its lines.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cp -r config config-backup
-<span class="p">$</span> echo "backup done" &gt;&gt; CHANGELOG.txt</pre><p>Folders need <code>cp -r</code> (else <code>-r not specified; omitting directory</code>). <code>&gt;&gt;</code> appends, <code>&gt;</code> would wipe the changelog.</p></details>
+<span class="c"># Files panel: open CHANGELOG.txt, add a new last line, save with Ctrl+S:</span>
+<span class="c">#   backup done</span>
+<span class="p">$</span> tail -n 2 CHANGELOG.txt     <span class="c"># check: the old last line, then "backup done"</span></pre><p>Folders need <code>cp -r</code> (else <code>-r not specified; omitting directory</code>). The note is text you type, so it goes in the editor; keep the old lines and only add one at the end.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Which users hit the API most?</summary>
@@ -601,7 +605,7 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
     <li><label><input type="checkbox" data-id="shell-02"> <code>labs/01-shell/02-grep-basics</code>
       <span>grep -i, -c, -v, -n into files with &gt;</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-03"> <code>labs/01-shell/03-redirects-and-pipes</code>
-      <span>echo &gt; vs &gt;&gt;, head, wc -l &lt; file, sort | uniq</span> <span class="lvl drill">Drill</span></label></li>
+      <span>new file in the editor, head, wc -l &lt; file, sort | uniq</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-04"> <code>labs/01-shell/04-grep-combine</code>
       <span>AND with a pipe, OR with -E, -h across two files, -w</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="shell-05"> <code>labs/01-shell/05-quiz-orders-500</code>
@@ -609,7 +613,7 @@ bash: gerp: command not found</pre><p><b>Means:</b> a typo, or an unquoted <code
     <li><label><input type="checkbox" data-id="shell-06"> <code>labs/01-shell/06-quiz-payments-three-logs</code>
       <span>Three rotated logs oldest first, 503ms trap, mkdir -p nested archive</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="shell-07"> <code>labs/01-shell/07-quiz-report-and-backup</code>
-      <span>WARN|ERROR report, error count, cp into new folder, append a note</span> <span class="lvl quiz">Quiz-style</span></label></li>
+      <span>WARN|ERROR report, error count, cp into new folder, add a note in the editor</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="shell-08"> <code>labs/01-shell/08-twist-failures-per-service</code>
       <span>Count 5xx per service with grep | cut | sort | uniq -c, pick the top</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="shell-09"> <code>labs/01-shell/09-twist-dated-folders</code>
@@ -809,7 +813,7 @@ def greet(name):
 &gt;&gt;&gt;&gt;&gt;&gt;&gt; feature</pre>
   <p>The steps, always the same:</p>
   <ol>
-    <li>Open the file (<code>code greet.py</code> / <code>nano greet.py</code>). Delete the 3 marker lines and write the final text the task asks for. Save.</li>
+    <li>Open the file in the Files panel (it shows the markers). Delete the 3 marker lines and write the final text the task asks for. Save with <code>Ctrl+S</code>.</li>
     <li>Check no markers are left: <code>grep -n '&lt;&lt;&lt;&lt;&lt;&lt;&lt;\|=======\|&gt;&gt;&gt;&gt;&gt;&gt;&gt;' greet.py</code> prints nothing.</li>
     <li><code>git add greet.py</code>: "add" here means <b>mark as resolved</b>.</li>
     <li><code>git commit --no-edit</code> (keeps git's "Merge branch 'feature'" message) or <code>git commit -m "..."</code>.</li>
@@ -829,7 +833,7 @@ fatal: You have not concluded your merge (MERGE_HEAD exists).</pre><p><b>Means:<
 
   <!-- ============ EDITOR ============ -->
   <h3 class="sub" id="git-editor">The editor trap: commit without -m</h3>
-  <p><code>git commit</code> without <code>-m</code>, and a merge that makes a merge commit, open a text editor for the message. On this machine the default is <b>vim</b> (no <code>core.editor</code> is set). The message is already filled in; you only need to save and quit.</p>
+  <p>You change <b>files</b> in the Files panel editor. But <code>git commit</code> without <code>-m</code>, and a merge that makes a merge commit, open a <b>different</b> text editor, inside the terminal, for the commit message. On this machine the default is <b>vim</b> (no <code>core.editor</code> is set). The message is already filled in; you only need to save and quit.</p>
   <table class="cmd"><thead><tr><th>Editor</th><th>How to recognise it</th><th>Save + quit</th></tr></thead><tbody>
     <tr><td>vim</td><td>screen full of <code>~</code> lines, no menu</td><td>press <code>Esc</code>, type <code>:wq</code>, Enter</td></tr>
     <tr><td>nano</td><td>menu at the bottom: <code>^O Write Out  ^X Exit</code></td><td><code>Ctrl+O</code>, Enter, <code>Ctrl+X</code></td></tr>
@@ -846,10 +850,10 @@ fatal: You have not concluded your merge (MERGE_HEAD exists).</pre><p><b>Means:<
     <tr><td><code>git rm old.txt</code></td><td>delete on disk + stage the deletion</td></tr>
     <tr><td><code>git rm --cached .env</code></td><td>stop tracking, <b>keep the file on disk</b></td></tr>
     <tr><td><code>git rm -r --cached folder/</code></td><td>same for a folder</td></tr>
-    <tr><td><code>echo '*.log' &gt;&gt; .gitignore</code></td><td>future <code>git add</code> skips matching untracked files</td></tr>
+    <tr><td><code>.gitignore</code> (make it with <b>+ New file</b>, one pattern per line, e.g. <code>*.log</code>)</td><td>future <code>git add</code> skips matching untracked files</td></tr>
   </tbody></table>
   <p>Plain <code>mv</code>/<code>rm</code> also work, but then git sees a deletion and a new untracked file, and you must <code>git add -A</code> to stage both.</p>
-  <div class="callout trap"><strong>Trap</strong><p><code>.gitignore</code> only affects <b>untracked</b> files. If <code>.env</code> was already committed, adding it to .gitignore does nothing; you need <code>git rm --cached .env</code> as well. Patterns: <code>*.log</code> any .log file, <code>node_modules/</code> a folder, <code>.env</code> one file. Always quote patterns in echo.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p><code>.gitignore</code> only affects <b>untracked</b> files. If <code>.env</code> was already committed, adding it to .gitignore does nothing; you need <code>git rm --cached .env</code> as well. Patterns: <code>*.log</code> any .log file, <code>node_modules/</code> a folder, <code>.env</code> one file. The file name must be exactly <code>.gitignore</code> (with the dot, no <code>.txt</code>).</p></div>
 
   <!-- ============ STASH ============ -->
   <h3 class="sub" id="git-stash">stash: a drawer for unfinished work</h3>
@@ -889,7 +893,7 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 1 Q16: fix-greeting branch</summary>
     <div class="body"><p>On main with one commit "Add greet" (<code>return "Hello " + name</code>). Create and switch to <code>fix-greeting</code>, change the line to <code>return f"Hello, {name}!"</code>, commit "Use f-string in greeting", stay on fix-greeting.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git switch -c fix-greeting
-<span class="p">$</span> code greet.py        <span class="c"># edit + SAVE</span>
+<span class="c"># Files panel: open greet.py, make line 2  return f"Hello, {name}!"  then Ctrl+S</span>
 <span class="p">$</span> git diff             <span class="c"># check: only the return line</span>
 <span class="p">$</span> git add greet.py
 <span class="p">$</span> git commit -m "Use f-string in greeting"
@@ -899,7 +903,8 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 1 Q17: resolve the conflict, main has 4 commits</summary>
     <div class="body"><p>main and feature both changed greet.py's return line after "Add greet". Merge feature into main, make the line <code>return f"Hi there, {name}! Welcome back."</code>, finish the merge with git's own message.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git merge feature                 <span class="c"># CONFLICT in greet.py</span>
-<span class="p">$</span> code greet.py                     <span class="c"># remove markers, write the new line, save</span>
+<span class="c"># Files panel: open greet.py, remove the 3 marker lines and both old lines,</span>
+<span class="c">#   write  return f"Hi there, {name}! Welcome back."  then Ctrl+S</span>
 <span class="p">$</span> git add greet.py                  <span class="c"># mark resolved</span>
 <span class="p">$</span> git commit --no-edit              <span class="c"># or: git commit, then :wq in vim</span>
 <span class="p">$</span> git rev-list --count main
@@ -929,7 +934,7 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Conflict in two files, keep the other side's whole file</summary>
     <div class="body"><p>Merge reports conflicts in greet.py and config.py. The task: config.py = feature's version, greet.py = a combination you type.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git checkout --theirs config.py   <span class="c"># theirs = branch being merged in</span>
-<span class="p">$</span> code greet.py                     <span class="c"># hand-combine, remove markers</span>
+<span class="c"># Files panel: open greet.py, hand-combine the line, remove the markers, Ctrl+S</span>
 <span class="p">$</span> git add config.py greet.py
 <span class="p">$</span> git status                        <span class="c"># All conflicts fixed but you are still merging.</span>
 <span class="p">$</span> git commit --no-edit</pre></details>
@@ -961,7 +966,7 @@ f84 Fix divide by zero
     <div class="body"><p><code>git status</code> says "You have unmerged paths", both modified: app.py. A teammate started <code>git merge experiment</code>, but experiment must never reach main. You need to merge <code>feature</code>, where both sides added a different last line to requirements.txt and both lines must stay.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git merge --abort                       <span class="c"># back to main's tip, no merge in progress</span>
 <span class="p">$</span> git merge feature                       <span class="c"># CONFLICT in requirements.txt</span>
-<span class="p">$</span> code requirements.txt                   <span class="c"># delete only the 3 marker lines, keep both lines</span>
+<span class="c"># Files panel: open requirements.txt, delete only the 3 marker lines, keep both lines, Ctrl+S</span>
 <span class="p">$</span> git add requirements.txt
 <span class="p">$</span> git commit --no-edit</pre><p>Running <code>git merge feature</code> first fails ("Merging is not possible because you have unmerged files"). Fixing app.py and committing would finish the experiment merge. "Keep both" means removing <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> and keeping the text from both halves (HEAD's half first).</p></details>
     </div></details>
@@ -969,7 +974,7 @@ f84 Fix divide by zero
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Hotfix an old tagged release + read the objects</summary>
     <div class="body"><p>main is 2 commits past the annotated tag <code>v1.0</code>. Make a fix commit on top of v1.0 only, keep it on a branch <code>v1-hotfix</code>, and return to main. Then answer: what is the type of <code>v1.0</code>? Which tree does your new commit point to? Two files in main's tree have the same content. How do you show that git stores them once?</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git switch --detach v1.0                <span class="c"># or git checkout v1.0 -&gt; detached HEAD</span>
-<span class="p">$</span> echo "RETRIES = 3" &gt; config.py
+<span class="c"># Files panel: open config.py, make it  RETRIES = 3 , Ctrl+S</span>
 <span class="p">$</span> git commit -am "Fix retries for 1.0"
 <span class="p">$</span> git switch -c v1-hotfix                 <span class="c"># give the detached commit a name NOW</span>
 <span class="p">$</span> git switch main
@@ -1023,7 +1028,7 @@ f84 Fix divide by zero
     <li><code>git branch name</code> create only; <code>git branch</code> list</li>
     <li><code>git merge feature</code> bring feature INTO the current branch</li>
     <li><code>git merge feature --no-edit</code> merge commit without the editor</li>
-    <li>conflict: edit file, remove markers → <code>git add f</code> → <code>git commit --no-edit</code></li>
+    <li>conflict: open the file in the Files panel, remove markers, Ctrl+S → <code>git add f</code> → <code>git commit --no-edit</code></li>
     <li><code>git merge --abort</code> undo a merge in progress</li>
     <li>vim: <code>Esc :wq Enter</code>; nano: <code>Ctrl+O Enter Ctrl+X</code>; <code>git config --global core.editor nano</code></li>
     <li><code>git rm --cached f</code> untrack but keep; <code>git mv a b</code> rename</li>
@@ -1208,9 +1213,9 @@ GET /health
 =======
 GET /search
 &gt;&gt;&gt;&gt;&gt;&gt;&gt; 68f0b35 (Add search endpoint)   <span class="c"># your commit being replayed</span>
-<span class="p">$</span> code routes.txt                <span class="c"># keep what's needed, delete the 3 marker lines</span>
+<span class="c"># Files panel: open routes.txt, keep what's needed, delete the 3 marker lines, Ctrl+S</span>
 <span class="p">$</span> git add routes.txt
-<span class="p">$</span> git rebase --continue          <span class="c"># opens the editor with the message: save + close</span>
+<span class="p">$</span> git rebase --continue          <span class="c"># opens a terminal editor with the message: vim :wq Enter</span>
 Successfully rebased and updated refs/heads/main.</pre>
   <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
     <tr><td><code>git rebase --continue</code></td><td>after <code>git add</code>-ing the fixed files: make this commit and go on</td></tr>
@@ -1305,7 +1310,8 @@ cfc90e8 Remove env file
 677777a Add config loader
 <span class="p">$</span> git show 677777a:.env
 DB_PASSWORD=Summer2024!
-<span class="p">$</span> echo ".env" &gt;&gt; .gitignore &amp;&amp; git add .gitignore &amp;&amp; git commit -m "Ignore .env"</pre>
+<span class="c"># Files panel: + New file -> .gitignore, type the line  .env  then Ctrl+S</span>
+<span class="p">$</span> git add .gitignore &amp;&amp; git commit -m "Ignore .env"</pre>
   <div class="callout why"><strong>Why rotate</strong><p>Once pushed, assume it's copied (forks, clones, scanners find it in minutes). The fix that works is <b>rotate</b>: change the password where it's used so the leaked one is dead. Rewriting history afterwards is clean-up, not a fix. Prevent it with <code>.gitignore</code> + a committed <code>.env.example</code>. Note: <code>.gitignore</code> doesn't affect files git already tracks (untrack with <code>git rm --cached .env</code>).</p></div>
 
   <!-- ============ SCENARIOS ============ -->
@@ -1385,9 +1391,9 @@ error: commit 2ceabd1... is a merge but no -m option was given.
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git status
 interactive rebase in progress; onto 9f8e7d6
 You are currently rebasing branch 'main' on '9f8e7d6'.
-<span class="p">$</span> code routes.txt                 <span class="c"># remove &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;, keep both lines</span>
+<span class="c"># Files panel: open routes.txt, remove &lt;&lt;&lt;&lt;&lt;&lt;&lt; ======= &gt;&gt;&gt;&gt;&gt;&gt;&gt;, keep both lines, Ctrl+S</span>
 <span class="p">$</span> git add routes.txt
-<span class="p">$</span> git rebase --continue           <span class="c"># editor opens for the message: save + close</span>
+<span class="p">$</span> git rebase --continue           <span class="c"># a terminal editor opens for the message: vim :wq Enter</span>
 <span class="c"># or give up completely:</span>
 <span class="p">$</span> git rebase --abort              <span class="c"># main back exactly as before the rebase</span></pre><p>(a) No branch: HEAD is detached while the rebase replays commits; main moves only at the end. (b) fix + <code>git add</code> + <code>--continue</code> (repeat for each commit that conflicts), or <code>--abort</code>. (c) During a rebase <code>HEAD</code> = the commit you are replaying <b>onto</b> (origin's side); the bottom part is <b>your</b> commit. That's the reverse of a merge. Don't run <code>git commit</code> in the middle; use <code>--continue</code>.</p></details>
     </div></details>
@@ -1735,8 +1741,7 @@ CMD ["node", "server.js"]
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Up, published, still unreachable</summary>
     <div class="body"><p><code>docker run -d -p 8080:3000 --name web app:1.0</code>. <code>docker ps</code> shows <code>0.0.0.0:8080-&gt;3000/tcp</code>, but <code>curl localhost:8080</code> gets an empty reply. <code>docker logs web</code> says <code>listening on 127.0.0.1:3000</code>. Fix it.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="c"># in server.js: .listen(3000, "0.0.0.0")</span>
-<span class="p">$</span> docker build -t app:1.1 .
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>server.js</code>, change the listen line to <code>.listen(3000, "0.0.0.0")</code> and save with Ctrl+S. Then:</p><pre class="term"><span class="p">$</span> docker build -t app:1.1 .
 <span class="p">$</span> docker rm -f web
 <span class="p">$</span> docker run -d -p 8080:3000 --name web app:1.1
 <span class="p">$</span> curl localhost:8080</pre><p>127.0.0.1 inside the container is the container's own loopback. A new image needs a new container: restart would reuse the old image.</p></details>
@@ -1757,10 +1762,13 @@ CMD ["node", "server.js"]
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The password is in the image</summary>
     <div class="body"><p>A teammate's Dockerfile has <code>ENV DB_PASSWORD=Summer2024!</code> and <code>COPY . .</code>, and there is no <code>.dockerignore</code>. The project folder has a <code>.env</code> with <code>DB_HOST</code> and <code>DB_PASSWORD</code>. They built <code>pay:1.0</code>. (a) Show two ways to read the password from the image. (b) Fix the build and build <code>pay:1.1</code>. (c) Run it as <code>pay</code> on host 8080 -&gt; 3000 with the settings from <code>.env</code>, using one flag. (d) Remove the leaky tag.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker history --no-trunc pay:1.0 | grep ENV      <span class="c"># ENV DB_PASSWORD=Summer2024!</span>
-<span class="p">$</span> docker run --rm pay:1.0 cat /app/.env              <span class="c"># COPY . . copied .env in</span>
-<span class="c"># delete the ENV DB_... lines from the Dockerfile, then:</span>
-<span class="p">$</span> printf '.env\nnode_modules\n.git\n' &gt; .dockerignore
-<span class="p">$</span> docker build -t pay:1.1 .
+<span class="p">$</span> docker run --rm pay:1.0 cat /app/.env              <span class="c"># COPY . . copied .env in</span></pre>
+<p>In the Files panel open <code>Dockerfile</code>, delete the two <code>ENV DB_...</code> lines, save with Ctrl+S. Click <b>+ New file</b>, type <code>.dockerignore</code>, make it read:</p>
+<pre class="term">.env
+node_modules
+.git</pre>
+<p>Save with Ctrl+S. Then in the terminal:</p>
+<pre class="term"><span class="p">$</span> docker build -t pay:1.1 .
 <span class="p">$</span> docker run -d --name pay -p 8080:3000 --env-file .env pay:1.1
 <span class="p">$</span> docker image rm pay:1.0</pre><p><code>ENV</code> (and <code>ARG</code>) values are recorded in the image metadata and in <code>docker history</code>. <code>COPY . .</code> copies everything in the build context that <code>.dockerignore</code> doesn't exclude. A later <code>RUN rm .env</code> doesn't help: the file stays in the earlier layer. Config and secrets go in the environment at run time (<code>--env-file</code> or <code>-e</code>), so one image runs anywhere. Lab 10.</p></details>
     </div></details>
@@ -1781,20 +1789,25 @@ CMD ["node", "server.js"]
 <span class="p">$</span> docker inspect -f '{{.State.ExitCode}}' report  <span class="c"># 3</span>
 <span class="p">$</span> docker rm report
 <span class="p">$</span> docker run -d --name report -p 8112:3000 -v "$(pwd)/config":/config:ro report:1.0
-<span class="c"># (c) after editing config/settings.json on the host:</span>
+<span class="c"># (c) after editing config/settings.json in the Files panel (it is the host file) and saving:</span>
 <span class="p">$</span> docker restart report</pre><p><code>-d</code> only says the container started; the main process exiting ends it. Logs survive on stopped containers. A left side starting with <code>/</code> is a <b>bind mount</b> (a host folder you choose); <code>-v config:/config</code> would create an empty <b>named volume</b> instead. The container sees the edited file immediately, but this app reads it only at start, so restart. Mounts can't be added to an existing container: rm + run. Lab 12.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Prove the cache, then retag</summary>
     <div class="body"><p>The Dockerfile is <code>FROM / WORKDIR /app / COPY . . / RUN npm ci / CMD</code>, and the folder has a 30 MB <code>logs/</code> and a laptop <code>node_modules/</code>. Make server.js edits skip npm ci (you may add lines), keep the junk out, build <code>shop:1.2</code> saving the plain build output to <code>build.log</code> (and on screen), point <code>shop:latest</code> at 1.2 without rebuilding, and delete <code>shop:1.0</code>.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">FROM node:24-alpine
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>Dockerfile</code>, make it read:</p><pre class="term">FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY . .
-CMD ["node", "server.js"]
-<span class="p">$</span> printf 'logs\nnode_modules\n.git\n.env\n' &gt; .dockerignore
-<span class="p">$</span> docker build --progress=plain -t shop:1.2 . 2&gt;&amp;1 | tee build.log
+CMD ["node", "server.js"]</pre>
+<p>Save with Ctrl+S. Click <b>+ New file</b>, type <code>.dockerignore</code>, make it read:</p>
+<pre class="term">logs
+node_modules
+.git
+.env</pre>
+<p>Save with Ctrl+S. Then in the terminal:</p>
+<pre class="term"><span class="p">$</span> docker build --progress=plain -t shop:1.2 . 2&gt;&amp;1 | tee build.log
 #8 [4/5] RUN npm ci --omit=dev
 #8 CACHED
 <span class="p">$</span> docker tag shop:1.2 shop:latest
@@ -1990,13 +2003,13 @@ def test_none_is_rejected():                   <span class="c"># invalid input -
   <p>This is quiz 2 Q16 (5 marks) and Milestone 1. The checks look at commit <b>positions</b>: <code>HEAD~1</code> must contain the new test and the <i>old</i> code; <code>HEAD</code> has the fix. So the order and the "only one file per commit" rule matter.</p>
   <pre class="term"><span class="p">$</span> cat validate.py                     <span class="c"># find the bug first: len(password) &gt; 8</span>
 <span class="p">$</span> pytest                              <span class="c"># 2 passed: existing tests miss the edge</span>
-<span class="p">$</span> code test_validate.py               <span class="c"># add test_accepts_exactly_eight_characters, save</span>
+<span class="c"># Files panel: open test_validate.py, add test_accepts_exactly_eight_characters, Ctrl+S</span>
 <span class="p">$</span> pytest                              <span class="c"># 1 failed, 2 passed  -&gt; RED is what you want now</span>
 <span class="p">$</span> git status --short
  M test_validate.py
 <span class="p">$</span> git add test_validate.py            <span class="c"># ONLY the test file</span>
 <span class="p">$</span> git commit -m "Add failing test for 8-character password"
-<span class="p">$</span> code validate.py                    <span class="c"># &gt; 8   becomes   &gt;= 8</span>
+<span class="c"># Files panel: open validate.py, &gt; 8 becomes &gt;= 8, Ctrl+S</span>
 <span class="p">$</span> pytest                              <span class="c"># 3 passed -&gt; GREEN</span>
 <span class="p">$</span> git add validate.py
 <span class="p">$</span> git commit -m "Fix password length check to accept 8 characters"
@@ -2105,15 +2118,15 @@ def test_order_just_under_50_pays():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q16 recreation: password length</summary>
     <div class="body"><p>main has one commit "Add password length check". <code>is_valid_length("abcdefgh")</code> returns False; a password needs at least 8 chars. Make exactly two commits: a test whose message contains "failing test", then the fix. Checked: HEAD~1 test file contains "abcdefgh", HEAD~1 validate.py unchanged, 3 commits, at least 3 tests all passing.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cat validate.py                 <span class="c"># return len(password) &gt; 8</span>
-<span class="p">$</span> code test_validate.py           <span class="c"># add:</span>
-def test_accepts_exactly_eight_characters():
-    assert is_valid_length("abcdefgh") is True
-<span class="p">$</span> pytest                          <span class="c"># 1 failed, 2 passed</span>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> cat validate.py                 <span class="c"># return len(password) &gt; 8</span></pre>
+<p>In the Files panel open <code>test_validate.py</code>, add at the end, save with Ctrl+S:</p>
+<pre class="term">def test_accepts_exactly_eight_characters():
+    assert is_valid_length("abcdefgh") is True</pre>
+<pre class="term"><span class="p">$</span> pytest                          <span class="c"># 1 failed, 2 passed</span>
 <span class="p">$</span> git add test_validate.py
-<span class="p">$</span> git commit -m "Add failing test for 8-character password"
-<span class="p">$</span> code validate.py                <span class="c"># &gt; 8  -&gt;  &gt;= 8</span>
-<span class="p">$</span> pytest                          <span class="c"># 3 passed</span>
+<span class="p">$</span> git commit -m "Add failing test for 8-character password"</pre>
+<p>In the Files panel open <code>validate.py</code>, change <code>&gt; 8</code> to <code>&gt;= 8</code>, save with Ctrl+S. Then:</p>
+<pre class="term"><span class="p">$</span> pytest                          <span class="c"># 3 passed</span>
 <span class="p">$</span> git add validate.py
 <span class="p">$</span> git commit -m "Fix password length check"
 <span class="p">$</span> git log --oneline               <span class="c"># 3 commits</span></pre><p>Add the test file only in commit 1, so validate.py at HEAD~1 is still the original.</p></details>
@@ -2121,17 +2134,17 @@ def test_accepts_exactly_eight_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Duplicate email returns 201</summary>
     <div class="body"><p><code>signup(repo, email)</code> returns 201 for a second signup with the same email; it should return 409. Tests use <code>FakeUserRepo</code>, an in-memory fake. Write the failing test and the fix as two commits. Why not use <code>Mock()</code> for the repo?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">def test_signup_rejects_duplicate_email():
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>test_signup.py</code>, add at the end, save with Ctrl+S:</p><pre class="term">def test_signup_rejects_duplicate_email():
     repo = FakeUserRepo()
     signup(repo, "user@example.com")
     status = signup(repo, "user@example.com")
     assert status == 409
-    assert repo.count() == 1
-<span class="p">$</span> pytest ; git add test_signup.py ; git commit -m "Add failing test for duplicate email signup"
-<span class="c"># signup.py, before repo.save(email):</span>
-    if repo.find(email) is not None:
-        return 409
-<span class="p">$</span> pytest ; git add signup.py ; git commit -m "Return 409 for duplicate email"</pre><p>A Mock stores nothing, so <code>find</code> never sees the first user; you could only assert "save was called". The fake really stores users, so the test checks the behaviour.</p></details>
+    assert repo.count() == 1</pre>
+<pre class="term"><span class="p">$</span> pytest ; git add test_signup.py ; git commit -m "Add failing test for duplicate email signup"</pre>
+<p>In the Files panel open <code>signup.py</code>, add these two lines inside <code>signup</code>, just before <code>repo.save(email)</code>, save with Ctrl+S:</p>
+<pre class="term">    if repo.find(email) is not None:
+        return 409</pre>
+<pre class="term"><span class="p">$</span> pytest ; git add signup.py ; git commit -m "Return 409 for duplicate email"</pre><p>A Mock stores nothing, so <code>find</code> never sees the first user; you could only assert "save was called". The fake really stores users, so the test checks the behaviour.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Oops, a third commit</summary>
@@ -2144,20 +2157,20 @@ def test_accepts_exactly_eight_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> PR merged with failing tests</summary>
     <div class="body"><p>The workflow has <code>on: push: branches: [main]</code> and the test step has <code>continue-on-error: true</code>. A PR with a failing test showed no checks and was merged. Fix the YAML, and say what else must change outside the file.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">on:
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>.github/workflows/ci.yml</code>, make these parts read as below, save with Ctrl+S:</p><pre class="term">on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 ...
       - name: Run unit tests
-        run: pytest -q            <span class="c"># continue-on-error removed</span>
-<span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Run CI on pull requests to main"</pre><p>Outside YAML: in GitHub's branch protection / ruleset for main, make the job <code>test</code> a required status check. Trigger + rule = merge gate.</p></details>
+        run: pytest -q            <span class="c"># continue-on-error removed</span></pre>
+<pre class="term"><span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Run CI on pull requests to main"</pre><p>Outside YAML: in GitHub's branch protection / ruleset for main, make the job <code>test</code> a required status check. Trigger + rule = merge gate.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> The surviving mutant</summary>
     <div class="body"><p>Code is <code>return len(pw) &gt;= 8</code>. Tests check "abc" (False) and a 19-char password (True). A mutation tool reports: mutant <code>&gt;= 8 -&gt; &gt; 8</code> SURVIVED, mutant <code>&gt;= 8 -&gt; &gt;= 7</code> SURVIVED. Which tests kill them? Does the code need a fix?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">def test_accepts_exactly_eight_characters():
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open the test file, add these two tests, save with Ctrl+S:</p><pre class="term">def test_accepts_exactly_eight_characters():
     assert is_valid_length("abcdefgh") is True    <span class="c"># kills &gt; 8</span>
 
 def test_rejects_seven_characters():
@@ -2174,8 +2187,12 @@ def test_rejects_seven_characters():
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: which of 8 commits broke it? (git bisect)</summary>
     <div class="body"><p>Rule: 10 or more items get 10% off. Tag <code>v1.0</code> was right; 8 commits later, exactly 10 items get no discount, and CI is green (tests only use 3 and 20 items). Find the first bad commit without reading every diff, then do the usual failing-test + fix pair. Where do you put the test while bisecting, and why?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> code test_regression.py         <span class="c"># NEW untracked file: assert bulk_discount(10) == 0.10</span>
-<span class="p">$</span> pytest -q                       <span class="c"># 1 failed: bug reproduced</span>
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel click <b>+ New file</b>, type <code>test_regression.py</code> (a NEW, untracked file), make it read, save with Ctrl+S:</p><pre class="term">from pricing import bulk_discount
+
+
+def test_exactly_ten_items_get_discount():
+    assert bulk_discount(10) == 0.10</pre>
+<pre class="term"><span class="p">$</span> pytest -q                       <span class="c"># 1 failed: bug reproduced</span>
 <span class="p">$</span> git bisect start
 <span class="p">$</span> git bisect bad                  <span class="c"># HEAD is bad</span>
 <span class="p">$</span> git bisect good v1.0            <span class="c"># this one was good; git checks out the middle</span>
@@ -2184,13 +2201,13 @@ e660570... is the first bad commit
     Tidy pricing code              <span class="c"># qty &gt;= BULK_MIN became qty &gt; BULK_MIN</span>
 <span class="p">$</span> git bisect reset                <span class="c"># back on main (else you stay on a detached HEAD)</span>
 <span class="p">$</span> git add test_regression.py ; git commit -m "Add failing test for exactly 10 items"
-<span class="p">$</span> code pricing.py                 <span class="c"># &gt;  -&gt;  &gt;=</span>
+<span class="c"># Files panel: open pricing.py, qty &gt; BULK_MIN becomes qty &gt;= BULK_MIN, Ctrl+S</span>
 <span class="p">$</span> pytest -q ; git add pricing.py ; git commit -m "Fix bulk discount for 10 items"</pre><p><code>git bisect run</code> reads the exit code: 0 = good, 1 = bad (125 = skip). An <b>untracked</b> test file stays put while bisect checks out old commits; editing a tracked test file first makes the checkout refuse ("local changes would be overwritten"). Binary search: 8 commits need only about 3 test runs. Without <code>run</code>, test each step yourself and type <code>git bisect good</code> or <code>git bisect bad</code>.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Hard: one table of boundary tests (parametrize)</summary>
     <div class="body"><p>Ticket prices: 0-4 free, 5-17 = 8, 18-64 = 15, 65-120 = 10, below 0 or above 120 = <code>ValueError</code>. Write the fewest test functions that check both sides of every edge and both invalid edges. Which ages, and what does a failing row look like?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term">import pytest
+      <details class="answer"><summary>Show answer</summary><p>In the Files panel open <code>test_tickets.py</code>, add this (keep the old tests), save with Ctrl+S:</p><pre class="term">import pytest
 from tickets import ticket_price
 
 @pytest.mark.parametrize("age, expected", [
@@ -2201,8 +2218,8 @@ def test_price(age, expected):
 @pytest.mark.parametrize("age", [-1, 121])
 def test_invalid_age(age):
     with pytest.raises(ValueError):
-        ticket_price(age)
-<span class="p">$</span> pytest -v
+        ticket_price(age)</pre>
+<pre class="term"><span class="p">$</span> pytest -v
 test_tickets.py::test_price[65-10] FAILED       <span class="c"># each row is its own test, with its values in the id</span></pre><p>The names are ONE string <code>"age, expected"</code>; each tuple is one run. Every edge needs the last value inside AND the first value outside (64 and 65; 120 and 121), or a <code>&lt;</code>/<code>&lt;=</code> slip survives.</p></details>
     </div></details>
 
@@ -2227,11 +2244,12 @@ def test_shop_is_closed_at_2am():
 
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Hard: write the whole CI workflow, with a lint gate</summary>
     <div class="body"><p>No CI exists. Write <code>.github/workflows/ci.yml</code>: on pull requests to main and pushes to main, job <code>build-and-test</code> must install, lint with <code>ruff check .</code>, then run <code>pytest</code>. <code>requirements.txt</code> only lists <code>pytest</code>, and <code>ruff check .</code> currently reports 2 errors. What do you commit, in which order?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> ruff check .                 <span class="c"># fix both errors in the code first</span>
-<span class="p">$</span> echo ruff &gt;&gt; requirements.txt  <span class="c"># the runner is a clean VM: no ruff unless installed</span>
-<span class="p">$</span> git add temps.py requirements.txt ; git commit -m "Fix lint errors, add ruff"
-<span class="p">$</span> mkdir -p .github/workflows ; code .github/workflows/ci.yml
-name: CI
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> ruff check .                 <span class="c"># read the 2 errors</span></pre>
+<p>In the Files panel fix both errors in <code>temps.py</code>, then open <code>requirements.txt</code> and add a line <code>ruff</code> (the runner is a clean VM: no ruff unless installed). Save each with Ctrl+S.</p>
+<pre class="term"><span class="p">$</span> ruff check . ; pytest -q
+<span class="p">$</span> git add temps.py requirements.txt ; git commit -m "Fix lint errors, add ruff"</pre>
+<p>Click <b>+ New file</b>, type <code>.github/workflows/ci.yml</code> (the folders are created for you), make it read, save with Ctrl+S:</p>
+<pre class="term">name: CI
 on:
   pull_request:
     branches: [main]
@@ -2247,8 +2265,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: ruff check .         <span class="c"># exit 1 on findings = red job</span>
-      - run: pytest
-<span class="p">$</span> python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"
+      - run: pytest</pre>
+<pre class="term"><span class="p">$</span> python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"
 <span class="p">$</span> git add .github/workflows/ci.yml ; git commit -m "Add CI workflow"</pre><p>Lint fix first, so the workflow's first run is green. No <code>continue-on-error</code> and no <code>|| true</code>: either makes a failing step count as success. Missing ruff in requirements = "ruff: command not found" (exit 127) on CI even though it works on your laptop. <code>ruff check . --fix</code> removes an unused import, but not an unused variable (an "unsafe" fix): edit that yourself.</p></details>
     </div></details>
 
@@ -2308,8 +2326,8 @@ jobs:
 <section class="topic" id="migrations" data-title="Migrations &amp; Flyway">
   <header class="topic-head">
     <span class="tag">Topic 6</span>
-    <h2>Database migrations with Flyway + sqlite3, and migration files in git</h2>
-    <p class="lede">Write numbered migration files, apply them with <code>flyway migrate</code>, read the history table with sqlite3, and recover from checksum mismatches, hand-run SQL and version collisions.</p>
+    <h2>Database migrations with Flyway, and migration files in git</h2>
+    <p class="lede">Write numbered migration files, apply them with <code>flyway migrate</code>, read the history table through <code>flyway info</code>, and recover from checksum mismatches, hand-run SQL and version collisions.</p>
   </header>
 
   <div class="model"><h3>Mental model</h3>
@@ -2319,7 +2337,7 @@ jobs:
     <b>ordered</b> (03 assumes 01 and 02 ran), <b>checksum-verified</b> (edit an applied file and Flyway stops). Anything done by hand is invisible to it.</p>
   </div>
 
-  <h3 class="sub" id="migrations-setup">Setup: the flyway command (Docker) and sqlite3</h3>
+  <h3 class="sub" id="migrations-setup">Setup: the flyway command (Docker) and the Files panel</h3>
   <p>Flyway is not installed on your laptop. <code>labs/bin/flyway</code> is a tiny script that runs the official Flyway image
   (<code>flyway/flyway:13.10.0</code>, already pulled) in Docker. It mounts the <b>current folder</b>, runs as your user (so <code>shop.db</code> is not owned by root),
   and Flyway reads <code>flyway.toml</code> from that folder. So: always <code>cd work</code> first. Once per terminal, from the Practice-Labs folder:</p>
@@ -2341,38 +2359,56 @@ sqlMigrationPrefix = ""            <span class="c"># course naming: no V in fron
 sqlMigrationSeparator = "_"        <span class="c"># 03_add_currency -&gt; version 03, description "add currency"</span>
 sqlMigrationSuffixes = [".up.sql"] <span class="c"># only .up.sql are migrations; .down.sql are ignored</span>
 validateMigrationNaming = true     <span class="c"># misnamed file = error, not silently skipped</span></pre>
+  <p><b>Your tools.</b> Like in the quiz, you only write files in <code>migrations/</code> and run <code>flyway</code> (plus git).
+  <code>shop.db</code> is the database. You never open it yourself: <code>flyway info</code> is your window into it.
+  Write files in the lab tool's <b>Files panel</b>: click <b>+ New file</b>, type the path with the folder
+  (<code>migrations/03_add_currency.up.sql</code>), write the SQL, save with <b>Ctrl+S</b>. Click an existing file to open and edit it.
+  Use the terminal for <code>flyway</code>, <code>git</code>, <code>ls</code>, <code>mv</code>, and <code>cat</code> to read a file.</p>
+  <div class="callout trap"><strong>Trap</strong><p>Flyway reads the file <b>on disk</b>, not your editor tab. Save with Ctrl+S before <code>flyway migrate</code>.
+  Typing only <code>03_add_currency.up.sql</code> in <b>+ New file</b> puts it next to <code>flyway.toml</code>, where Flyway never looks.</p></div>
   <div class="callout tip"><strong>Tip</strong><p>The quiz terminal may have Flyway installed directly. Same commands, same output: <code>flyway migrate</code>, <code>flyway info</code>. The wrapper only hides the Docker part.</p></div>
 
   <h3 class="sub" id="migrations-naming">File names: course naming vs Flyway's default</h3>
   <table class="cmd"><thead><tr><th>Naming</th><th>Example</th><th>Used in</th></tr></thead><tbody>
-    <tr><td>Course (configured above)</td><td><code>03_add_currency.up.sql</code> + <code>03_add_currency.down.sql</code></td><td>quiz 2 Q18, labs 03-10</td></tr>
-    <tr><td>Flyway default</td><td><code>V3__add_currency.sql</code> (capital V, <b>two</b> underscores)</td><td>Flyway docs, lab 02</td></tr>
+    <tr><td>Course (configured above)</td><td><code>03_add_currency.up.sql</code> + <code>03_add_currency.down.sql</code></td><td>quiz 2 Q18, labs 01, 03, 04, 06-11, 13, 14</td></tr>
+    <tr><td>Flyway default</td><td><code>V3__add_currency.sql</code> (capital V, <b>two</b> underscores)</td><td>Flyway docs, labs 02, 12</td></tr>
     <tr><td>Timestamp version</td><td><code>202610071517_add_search_index.sql</code></td><td>quiz 2 Q17, labs 05, 10</td></tr>
   </tbody></table>
   <p>Version = everything before the first separator. Versions compare <b>as numbers</b>: <code>3</code> and <code>03</code> are the same version (duplicate!), and <code>05 &lt; 202610261030</code>.
-  The description is the rest, with <code>_</code> shown as spaces. Flyway (free edition) has <b>no undo command</b>: a <code>.down.sql</code> is a file you run yourself with sqlite3.</p>
+  The description is the rest, with <code>_</code> shown as spaces. Flyway (free edition) has <b>no undo command</b>: it never runs a <code>.down.sql</code>. You write it so the change <i>can</i> be undone later (by a tool or a person); it does not show up in <code>flyway info</code>.</p>
   <div class="callout trap"><strong>Trap</strong><p>A file that does not match the naming is not a migration. Without <code>validateMigrationNaming</code> Flyway silently skips it. Rule: if <code>flyway info</code> does not list your file, its name is wrong.</p></div>
 
-  <h3 class="sub" id="migrations-sqlite">sqlite3: look inside the database</h3>
-  <p>An SQLite database is one file (<code>shop.db</code>). <code>sqlite3</code> opens it. Dot-commands have <b>no</b> <code>;</code>; SQL statements <b>need</b> <code>;</code>.</p>
-  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
-    <tr><td><code>sqlite3 shop.db</code></td><td>open the <code>sqlite&gt;</code> prompt on that file (a typo creates a new empty file!)</td></tr>
-    <tr><td><code>.tables</code></td><td>list tables</td></tr>
-    <tr><td><code>.schema orders</code></td><td>show the CREATE statement (columns, types, indexes)</td></tr>
-    <tr><td><code>.headers on</code> / <code>.mode column</code></td><td>nicer output</td></tr>
-    <tr><td><code>.quit</code> (or Ctrl+D)</td><td>leave</td></tr>
-    <tr><td><code>sqlite3 shop.db "SELECT * FROM orders;"</code></td><td>one-shot: run one statement and exit (quote the SQL!)</td></tr>
-    <tr><td><code>sqlite3 -header -column shop.db "..."</code></td><td>one-shot with headers + columns</td></tr>
-    <tr><td><code>sqlite3 shop.db &lt; migrations/03_x.down.sql</code></td><td>run a whole SQL file</td></tr>
-    <tr><td><code>sqlite3 shop.db "SELECT count(*) FROM orders;" &gt; n.txt</code></td><td>save a result to a file</td></tr>
-    <tr><td><code>sqlite3 shop.db "SELECT name FROM pragma_table_info('orders');"</code></td><td>list a table's columns</td></tr>
+  <h3 class="sub" id="migrations-info">Reading <code>flyway info</code>: the history table for you</h3>
+  <p><code>flyway info</code> puts two lists side by side: the migration files, and the rows of the history table
+  <code>flyway_schema_history</code> (one row per migration Flyway ran: version, script name, checksum, when, success).
+  It is read-only, so run it first and last, every time.</p>
+  <pre class="term"><span class="p">$</span> flyway info
+Schema version: 05
++-----------+---------+-----------------+----------+---------------------+--------------------+
+| Category  | Version | Description     | Type     | Installed On        | State              |
++-----------+---------+-----------------+----------+---------------------+--------------------+
+| Versioned | 01      | create users    | SQL      |                     | Ignored (Baseline) |
+|           | 01      | existing schema | BASELINE | 2026-10-27 17:24:07 | Baseline           |
+| Versioned | 02      | create orders   | SQL      | 2026-10-27 17:24:17 | Success            |
+| Versioned | 03      | add city        | SQL      | 2026-10-27 17:24:17 | Success            |
+| Versioned | 05      | create coupons  | SQL      | 2026-10-27 17:24:17 | Success            |
+| Versioned | 04      | index orders    | SQL      | 2026-10-27 17:24:26 | Out of Order       |
++-----------+---------+-----------------+----------+---------------------+--------------------+</pre>
+  <table class="cmd"><thead><tr><th>What you see</th><th>What it means</th></tr></thead><tbody>
+    <tr><td><code>Schema version: 05</code></td><td>highest version that is applied. Pending files don't count.</td></tr>
+    <tr><td>row order</td><td>applied rows come in the order Flyway <b>ran</b> them (here 04 ran last), then pending ones</td></tr>
+    <tr><td><code>Installed On</code></td><td>when it ran. Empty = it never ran here.</td></tr>
+    <tr><td><b>Success</b></td><td>file has a history row: applied</td></tr>
+    <tr><td><b>Pending</b></td><td>file has no history row yet: the next <code>migrate</code> runs it</td></tr>
+    <tr><td><b>Failed</b></td><td>it ran without a transaction and broke halfway. Blocks every migrate until <code>flyway repair</code></td></tr>
+    <tr><td><b>Baseline</b> (Type <code>BASELINE</code>)</td><td>a marker row from <code>flyway baseline</code>: "everything up to here was already there"</td></tr>
+    <tr><td><b>Ignored (Baseline)</b> / <b>Below Baseline</b></td><td>a file at or below the baseline: its SQL never ran here, and never will</td></tr>
+    <tr><td><b>Ignored</b></td><td>a lower version that showed up after a higher one ran. migrate refuses until you allow <code>-outOfOrder=true</code></td></tr>
+    <tr><td><b>Out of Order</b></td><td>applied, but after a higher version (with <code>-outOfOrder=true</code>)</td></tr>
+    <tr><td>Category <b>Repeatable</b>, empty Version</td><td>an <code>R__</code> file. <b>Outdated</b> = file changed since it ran (will re-run); <b>Superseded</b> = an old run of it</td></tr>
   </tbody></table>
-  <pre class="term"><span class="p">$</span> sqlite3 -header -column shop.db "SELECT version, description, script, success FROM flyway_schema_history;"
-version  description    script                   success
--------  -------------  -----------------------  -------
-01       create orders  01_create_orders.up.sql  1
-02       index orders   02_index_orders.up.sql   1</pre>
-  <div class="callout trap"><strong>Trap</strong><p><code>sqlite3 shop.db SELECT * FROM orders;</code> without quotes: the shell expands <code>*</code> to file names and eats the <code>;</code>. Forgot <code>;</code> at the prompt? You see <code>...&gt;</code>: type <code>;</code> and Enter.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p>"Last one run" and "schema version" are different questions. Above, 04 ran last, but the schema version is 05.
+  If your new file is not in the table at all, its name is wrong (or it is not in <code>migrations/</code>).</p></div>
 
   <h3 class="sub" id="migrations-commands">The Flyway commands</h3>
   <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
@@ -2411,10 +2447,12 @@ Schema "main" is up to date. No migration necessary.</pre>
     <tr><td><b>Reverse (down) migration</b></td><td><b>new</b> SQL run after the up committed</td><td><code>ALTER TABLE users ADD COLUMN bio text;</code> bio is back, <b>NULL</b> in every row</td></tr>
     <tr><td><b>Restore</b></td><td>recover data from a backup</td><td>values as of the backup time</td></tr>
   </tbody></table>
-  <p>Without BEGIN each statement autocommits: if statement 2 fails, statement 1 stays. A down migration cannot restore values the up deleted (quiz 2 Q9: answer <b>NULL for every row</b>). Run downs in <b>reverse order</b> (04 then 03). With Flyway free edition, after running a down by hand also delete its history row, or Flyway still thinks it is applied:</p>
-  <pre class="term"><span class="p">$</span> sqlite3 shop.db &lt; migrations/02_drop_bio.down.sql
-<span class="p">$</span> sqlite3 shop.db "DELETE FROM flyway_schema_history WHERE version = '02';"   <span class="c"># quote it: version is text</span>
-<span class="p">$</span> flyway info        <span class="c"># 02 Pending</span></pre>
+  <p>Without BEGIN each statement autocommits: if statement 2 fails, statement 1 stays. A down migration cannot restore values the up deleted (quiz 2 Q9: answer <b>NULL for every row</b>). Downs undo in <b>reverse order</b> (04 then 03), and each down undoes only its own migration.
+  Flyway free edition never runs a down. On a shared database the way back is to <b>roll forward</b>: put the reverse SQL in the <b>next</b> migration.</p>
+  <p>Files panel, <b>+ New file</b> <code>migrations/03_restore_bio.up.sql</code>, write, <b>Ctrl+S</b>:</p>
+  <pre class="term">ALTER TABLE users ADD COLUMN bio TEXT;</pre>
+  <pre class="term"><span class="p">$</span> flyway migrate     <span class="c"># 03 runs: bio is back, NULL in every row</span>
+<span class="p">$</span> flyway info        <span class="c"># 01, 02, 03 Success: the history tells exactly what happened</span></pre>
 
   <h3 class="sub" id="migrations-errors">Errors you must recognise</h3>
   <div class="err"><pre>ERROR: Validate failed: Migrations have failed validation
@@ -2426,8 +2464,13 @@ Either revert the changes to the migration, or run repair to update the schema h
     <p><b>Fix:</b> put the file back (<code>git restore --source=HEAD~1 file</code> or <code>git revert</code>) and put the change in the <b>next</b> migration (03). <code>repair</code> only makes the error go away: the new SQL never runs, and other databases differ. Use repair only for harmless edits (comments) or to clear a failed row.</p></div>
   <div class="err"><pre>ERROR: Migration of schema "main" to version "03 - add full name" failed! Changes successfully rolled back.
 Message    : [SQLITE_ERROR] SQL error or missing database (duplicate column name: full_name)</pre>
-    <p><b>Means:</b> the change was already made by hand (psql/sqlite3). Hand-run SQL changes the schema but writes no history row, so 03 is still Pending (quiz 2 Q8). PostgreSQL says <code>column "full_name" of relation "users" already exists</code>; for a table: <code>table x already exists</code>.</p>
-    <p><b>Fix:</b> undo the hand change if it holds no data (<code>ALTER TABLE users DROP COLUMN full_name;</code>) then <code>flyway migrate</code>; or record it without running: <code>flyway migrate -skipExecutingMigrations=true -target=03</code>.</p></div>
+    <p><b>Means:</b> the change was already made by hand, outside Flyway. Hand-run SQL changes the schema but writes no history row, so 03 is still Pending (quiz 2 Q8). PostgreSQL says <code>column "full_name" of relation "users" already exists</code>; for a table: <code>table x already exists</code>.</p>
+    <p><b>Fix:</b> if the hand-run SQL is <b>exactly</b> the file's SQL, record 03 without running it: <code>flyway migrate -skipExecutingMigrations=true -target=03</code>, then a plain <code>flyway migrate</code> for the rest. <code>-target=03</code> matters: without it every pending migration is recorded but never run.</p></div>
+  <div class="err"><pre>ERROR: Validate failed: Migrations have failed validation
+Detected failed migration to version 02 (create coupons).
+Please remove any half-completed changes then run repair to fix the schema history.</pre>
+    <p><b>Means:</b> 02 ran <b>without a transaction</b> (e.g. <code>executeInTransaction=false</code>, or MySQL DDL) and broke halfway. The first statements stayed; <code>flyway info</code> shows 02 <b>Failed</b>.</p>
+    <p><b>Fix:</b> fix the file (allowed: it never succeeded) and make it safe to re-run (<code>IF NOT EXISTS</code>, <code>INSERT OR IGNORE</code>), then <code>flyway repair</code> (removes the Failed row) and <code>flyway migrate</code>.</p></div>
   <div class="err"><pre>ERROR: Found more than one migration with version 04
 Offenders:
 -&gt; /work/migrations/04_add_coupons.sql (SQL)
@@ -2443,8 +2486,9 @@ To ignore this migration, set -ignoreMigrationPatterns='*:ignored'. To allow exe
   <div class="err"><pre>ERROR: Invalid SQL filenames found:
 Invalid versioned migration name format: 04-add-x.up.sql (could not recognise version number 04-add-x)</pre>
     <p><b>Means:</b> wrong separator/prefix (here <code>-</code> instead of <code>_</code>; in default naming <code>V3_x.sql</code> with one underscore).</p><p><b>Fix:</b> rename the file.</p></div>
-  <div class="err"><pre>Error: stepping, Cannot add a NOT NULL column with default value NULL</pre>
-    <p><b>Means:</b> SQLite can't add a NOT NULL column to rows that exist without a default.</p><p><b>Fix:</b> <code>ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'</code> (old rows get INR), or add it nullable, backfill, then enforce.</p></div>
+  <div class="err"><pre>ERROR: Migration of schema "main" to version "03 - add currency" failed! Changes successfully rolled back.
+Message    : [SQLITE_ERROR] SQL error or missing database (Cannot add a NOT NULL column with default value NULL)</pre>
+    <p><b>Means:</b> SQLite can't add a NOT NULL column to rows that exist without a default.</p><p><b>Fix:</b> the migration rolled back and has no history row, so just fix the file: <code>ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR'</code> (old rows get INR), save, <code>flyway migrate</code> again.</p></div>
 
   <h3 class="sub" id="migrations-git">Migrations in git: timestamp versions</h3>
   <p>Sequence numbers collide when two people write migration 04 the same afternoon. Timestamps (<code>yyyyMMddHHmm</code>) are unique without coordination and sort by when they were written.</p>
@@ -2473,14 +2517,14 @@ search
   <div class="callout trap"><strong>Trap</strong><p>A single <code>RENAME COLUMN</code> breaks every old instance at once. Backfilling before the app writes both leaves NULLs for rows written meanwhile (Q11 option B).</p></div>
 
   <details class="scenario"><summary><span class="lvl drill">Drill</span> Which rows are in the history table after this?</summary>
-    <div class="body"><p>Files 01, 02, 03 exist. 01 and 02 were applied by Flyway. You run 03's SQL by hand in sqlite3. What does <code>flyway info</code> show for 03, and what does <code>flyway migrate</code> do?</p>
+    <div class="body"><p>Files 01, 02, 03 exist. 01 and 02 were applied by Flyway. A teammate runs 03's SQL by hand, outside Flyway. What does <code>flyway info</code> show for 03, and what does <code>flyway migrate</code> do?</p>
       <details class="answer"><summary>Show answer</summary><pre class="term">03 Pending (no history row). migrate runs 03 again -&gt; "duplicate column name" / "already exists", rolled back.</pre><p>The history table only changes when the runner records a migration.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl drill">Drill</span> Add a column the Flyway way (default naming)</summary>
     <div class="body"><p><code>migrations/V1__create_users.sql</code> is applied. Add <code>email TEXT</code> to users.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo 'ALTER TABLE users ADD COLUMN email TEXT;' &gt; migrations/V2__add_email.sql
-<span class="p">$</span> flyway migrate
+      <details class="answer"><summary>Show answer</summary><p>Files panel: <b>+ New file</b> <code>migrations/V2__add_email.sql</code>, write, <b>Ctrl+S</b>:</p><pre class="term">ALTER TABLE users ADD COLUMN email TEXT;</pre>
+<pre class="term"><span class="p">$</span> flyway migrate
 <span class="p">$</span> flyway info</pre><p>New change = new file with the next version. Capital V, two underscores.</p></details>
     </div></details>
 
@@ -2493,19 +2537,21 @@ search
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Q18 (reconstructed): two migrations + two reverse migrations</summary>
     <div class="body"><p>shop.db has 01 (create orders) and 02 (index) applied, 3 orders. Write 03 adding <code>currency TEXT NOT NULL DEFAULT 'INR'</code>, 04 creating <code>coupons(code TEXT PRIMARY KEY, percent INTEGER NOT NULL)</code>, their down files, and apply with flyway.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR';" &gt; migrations/03_add_currency.up.sql
-<span class="p">$</span> echo "ALTER TABLE orders DROP COLUMN currency;" &gt; migrations/03_add_currency.down.sql
-<span class="p">$</span> echo "CREATE TABLE coupons (code TEXT PRIMARY KEY, percent INTEGER NOT NULL);" &gt; migrations/04_create_coupons.up.sql
-<span class="p">$</span> echo "DROP TABLE coupons;" &gt; migrations/04_create_coupons.down.sql
-<span class="p">$</span> flyway info &amp;&amp; flyway migrate &amp;&amp; flyway info
-<span class="p">$</span> sqlite3 -header -column shop.db "SELECT * FROM orders;"</pre><p>Double quotes outside let you write 'INR' inside. Test downs on a copy (<code>cp shop.db /tmp/t.db</code>), 04 first.</p></details>
+      <details class="answer"><summary>Show answer</summary><p>Four files, each with <b>+ New file</b> in the Files panel and <b>Ctrl+S</b>:</p><pre class="term">migrations/03_add_currency.up.sql      ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR';
+migrations/03_add_currency.down.sql    ALTER TABLE orders DROP COLUMN currency;
+migrations/04_create_coupons.up.sql    CREATE TABLE coupons (code TEXT PRIMARY KEY, percent INTEGER NOT NULL);
+migrations/04_create_coupons.down.sql  DROP TABLE coupons;</pre>
+<pre class="term"><span class="p">$</span> flyway info        <span class="c"># 03, 04 Pending (down files are never listed)</span>
+<span class="p">$</span> flyway migrate
+<span class="p">$</span> flyway info        <span class="c"># 01-04 Success</span></pre><p>Without <code>DEFAULT 'INR'</code> SQLite refuses a NOT NULL column on a table with rows. Downs undo newest first: 04, then 03.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A teammate edited applied migration 02</summary>
     <div class="body"><p><code>flyway migrate</code> prints "checksum mismatch for migration version 02". The edit (last commit) added <code>billing_email</code> to 02. Fix it without repair and without rewriting history.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git restore --source=HEAD~1 migrations/02_add_billing.up.sql migrations/02_add_billing.down.sql
-<span class="p">$</span> echo "ALTER TABLE users ADD COLUMN billing_email TEXT;" &gt; migrations/03_add_billing_email.up.sql
-<span class="p">$</span> echo "ALTER TABLE users DROP COLUMN billing_email;" &gt; migrations/03_add_billing_email.down.sql
+<span class="c"># Files panel, + New file, Ctrl+S:</span>
+<span class="c">#   migrations/03_add_billing_email.up.sql    ALTER TABLE users ADD COLUMN billing_email TEXT;</span>
+<span class="c">#   migrations/03_add_billing_email.down.sql  ALTER TABLE users DROP COLUMN billing_email;</span>
 <span class="p">$</span> flyway migrate
 <span class="p">$</span> git add -A &amp;&amp; git commit -m "Move billing_email into migration 03"</pre><p>Treat an applied migration as immutable history; fix it with the next one.</p></details>
     </div></details>
@@ -2523,19 +2569,18 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> flyway info says 02 <i>Failed</i></summary>
-    <div class="body"><p><code>02_add_total_paise.up.sql</code> = ADD COLUMN, UPDATE (backfill), CREATE INDEX. It ran <b>without a transaction</b> and failed on the index (typo <code>ordrs</code>). <code>flyway migrate</code> now says <i>Detected failed migration to version 02. Please remove any half-completed changes then run repair</i>. Get 02 fully applied without losing orders.</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> sqlite3 -header -column shop.db "SELECT * FROM orders;"     <span class="c"># total_paise exists and is filled: steps 1+2 committed</span>
-<span class="p">$</span> sed -i 's/ON ordrs/ON orders/' migrations/02_add_total_paise.up.sql   <span class="c"># OK: 02 never succeeded anywhere</span>
-<span class="p">$</span> sqlite3 shop.db "ALTER TABLE orders DROP COLUMN total_paise;"   <span class="c"># remove the half-done change</span>
-<span class="p">$</span> flyway repair       <span class="c"># removes the Failed row</span>
-<span class="p">$</span> flyway migrate      <span class="c"># 02 runs from line 1, Success</span></pre><p>Order matters: repair first and then migrate gives <code>duplicate column name</code> and a new Failed row. With a transaction (the SQLite/PostgreSQL default) there is no Failed row at all: everything rolls back. Don't delete the ALTER/UPDATE from 02: a fresh database still needs them.</p></details>
+    <div class="body"><p><code>02_create_coupons.up.sql</code> = CREATE TABLE coupons, INSERT two coupons, CREATE INDEX. It ran <b>without a transaction</b> and failed on the index (typo <code>coupns</code>). <code>flyway migrate</code> now says <i>Detected failed migration to version 02. Please remove any half-completed changes then run repair</i>. Get 02 fully applied, using only the editor and <code>flyway</code>.</p>
+      <details class="answer"><summary>Show answer</summary><p>Open <code>migrations/02_create_coupons.up.sql</code> in the Files panel, make every step re-runnable and fix the typo, <b>Ctrl+S</b>:</p><pre class="term">CREATE TABLE IF NOT EXISTS coupons (code TEXT PRIMARY KEY, percent INTEGER NOT NULL);
+INSERT OR IGNORE INTO coupons (code, percent) VALUES ('WELCOME10', 10), ('FESTIVE20', 20);
+CREATE INDEX IF NOT EXISTS idx_coupons_percent ON coupons (percent);</pre>
+<pre class="term"><span class="p">$</span> flyway repair       <span class="c"># removes the Failed row; runs no SQL</span>
+<span class="p">$</span> flyway migrate      <span class="c"># 02 runs from line 1: table + rows skipped, index created. Success</span></pre><p>Statements 1 and 2 committed before the failure, so a plain re-run fails with <code>table coupons already exists</code> (and a new Failed row). Editing 02 is fine here: it never succeeded anywhere. Don't delete the CREATE/INSERT from 02: a fresh database still needs them. With a transaction (the SQLite/PostgreSQL default) there is no Failed row at all: everything rolls back.</p></details>
     </div></details>
 
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Change a view: new V file or edit the R file?</summary>
     <div class="body"><p>Default naming. <code>R__active_users.sql</code> (DROP VIEW IF EXISTS + CREATE VIEW) is applied. Users need a <code>city</code> column, and the view must show it. What files do you write, what does <code>flyway info</code> show before migrate, and what is in the history table afterwards?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> echo "ALTER TABLE users ADD COLUMN city TEXT;" &gt; migrations/V3__add_city.sql
-<span class="p">$</span> code migrations/R__active_users.sql      <span class="c"># SELECT id, name, city FROM users WHERE active = 1;</span>
-<span class="p">$</span> flyway info       <span class="c"># V3 Pending; old R row "Outdated" + new R row "Pending"</span>
+      <details class="answer"><summary>Show answer</summary><p>Files panel: <b>+ New file</b> <code>migrations/V3__add_city.sql</code>, write, <b>Ctrl+S</b>:</p><pre class="term">ALTER TABLE users ADD COLUMN city TEXT;</pre><p>Open <code>migrations/R__active_users.sql</code>, change the SELECT line, <b>Ctrl+S</b>:</p><pre class="term">  SELECT id, name, city FROM users WHERE active = 1;</pre>
+<pre class="term"><span class="p">$</span> flyway info       <span class="c"># V3 Pending; old R row "Outdated" + new R row "Pending"</span>
 <span class="p">$</span> flyway migrate    <span class="c"># V3 first, then the repeatable</span></pre><p>Versioned (V) = runs once, never edit. Repeatable (R__, no version) = re-runs whenever its checksum changes, after all versioned ones; editing it IS how you change it. History gets a second R__active_users.sql row (version empty, new checksum); info shows the old one as Superseded.</p></details>
     </div></details>
 
@@ -2547,22 +2592,22 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
 <span class="p">$</span> flyway migrate -outOfOrder=true     <span class="c"># hotfix: "Out of Order"; notes: normal Success</span></pre><p>Renumber only what ran nowhere (the hotfix's version is in production's history; renaming it would make production run it twice). Rename <b>before</b> outOfOrder, or the old version gets applied too. <code>git mv</code> fails on untracked files (<i>not under version control</i>): use <code>mv</code> + <code>git add</code>.</p></details>
     </div></details>
 
-  <details class="scenario"><summary><span class="lvl twist">Twist</span> Read the history table: last run vs current version</summary>
-    <div class="body"><p>History (by installed_rank): 1 <code>01 BASELINE</code>, 2 <code>02</code>, 3 <code>03</code>, 4 <code>05</code>, 5 <code>04</code>. Which version ran last? What is the schema version? Which file's SQL never ran here? Then someone adds only a <code>--</code> comment to applied 03 and validate fails: repair or new migration?</p>
-      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> sqlite3 shop.db "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;"   <span class="c"># 04</span>
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Read flyway info: last run vs current version</summary>
+    <div class="body"><p><code>flyway info</code> lists, in run order: the 01 file <i>Ignored (Baseline)</i> + a <code>BASELINE</code> row 01, then 02, 03, 05 Success, then 04 <i>Out of Order</i>. Which version ran last? What is the schema version? Which file's SQL never ran here? Then someone adds only a <code>--</code> comment to applied 03 and validate fails: repair or new migration?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> flyway info                              <span class="c"># last row, latest Installed On: 04 (Out of Order)</span>
 <span class="p">$</span> flyway info | grep "Schema version"      <span class="c"># 05</span>
-<span class="p">$</span> sqlite3 shop.db "SELECT version FROM flyway_schema_history WHERE type = 'BASELINE';"   <span class="c"># 01: info says Ignored (Baseline)</span>
+<span class="c"># never executed here: 01 (Ignored (Baseline): the BASELINE row stands in for it)</span>
 <span class="p">$</span> git diff HEAD~1 HEAD                     <span class="c"># only a comment line</span>
-<span class="p">$</span> flyway repair                            <span class="c"># records the new checksum; runs no SQL</span></pre><p>installed_rank = order Flyway ran things; version = order it wants them. The checksum covers the whole text, comments too. A comment changes nothing in any database, so repair is right; an edit that changes SQL (lab 07) needs a new migration instead.</p></details>
+<span class="p">$</span> flyway repair                            <span class="c"># records the new checksum; runs no SQL</span></pre><p>Row order in info = order Flyway ran things; version = order it wants them. The checksum covers the whole text, comments too. A comment changes nothing in any database, so repair is right; an edit that changes SQL (lab 07) needs a new migration instead.</p></details>
     </div></details>
 
   <div class="labs"><h3>Practice labs</h3><ul>
-    <li><label><input type="checkbox" data-id="migrations-01"> <code>labs/06-migrations/01-sqlite-basics</code>
-      <span>sqlite3 prompt, .tables/.schema, one-shot INSERT, save a count with &gt;</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="migrations-01"> <code>labs/06-migrations/01-flyway-info-basics</code>
+      <span>read flyway info (Schema version, Success vs Pending), answer in a file, migrate only up to 03 with -target</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-02"> <code>labs/06-migrations/02-first-migrate</code>
-      <span>flyway info/migrate, read flyway_schema_history, add V2__add_email.sql (default naming)</span> <span class="lvl drill">Drill</span></label></li>
+      <span>flyway info/migrate, write V2__add_email.sql in the editor (default naming)</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-03"> <code>labs/06-migrations/03-down-loses-data</code>
-      <span>run a .down.sql by hand: bio comes back NULL; delete the history row so 02 is Pending</span> <span class="lvl drill">Drill</span></label></li>
+      <span>no undo in Flyway free: roll forward with 03_restore_bio (+ down); bio comes back NULL</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-04"> <code>labs/06-migrations/04-baseline</code>
       <span>existing hand-built DB: "no schema history table" -&gt; baseline at 02, then migrate 03</span> <span class="lvl drill">Drill</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-05"> <code>labs/06-migrations/05-quiz-timestamp-rename</code>
@@ -2572,19 +2617,19 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
     <li><label><input type="checkbox" data-id="migrations-07"> <code>labs/06-migrations/07-quiz-checksum-mismatch</code>
       <span>applied 02 was edited: restore it from git, move the change into 03, migrate, commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-08"> <code>labs/06-migrations/08-quiz-hand-run-sql</code>
-      <span>Quiz 2 Q8 made real: hand-run ALTER makes migrate fail; get 03 recorded properly</span> <span class="lvl quiz">Quiz-style</span></label></li>
+      <span>Quiz 2 Q8 made real: hand-run ALTER makes migrate fail; record 03 with -skipExecutingMigrations -target=03, run 04</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-09"> <code>labs/06-migrations/09-twist-expand-contract</code>
       <span>user_name -&gt; full_name in staged migrations (-target), backfill, contract, repairing down</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-10"> <code>labs/06-migrations/10-twist-two-branches-05</code>
       <span>two branches both add 05: rename up+down to a timestamp, merge, migrate both</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-11"> <code>labs/06-migrations/11-quiz-failed-migration-repair</code>
-      <span>non-transactional 02 failed halfway: read the Failed row, undo the half-done change, fix, repair, migrate</span> <span class="lvl quiz">Quiz-style</span></label></li>
+      <span>non-transactional 02 failed halfway: make it re-runnable, fix the typo, repair, migrate</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-12"> <code>labs/06-migrations/12-quiz-repeatable-view</code>
       <span>versioned vs repeatable: V3 adds a column, edit R__active_users.sql, add a new R__ view, one migrate</span> <span class="lvl quiz">Quiz-style</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-13"> <code>labs/06-migrations/13-twist-out-of-order-hotfix</code>
       <span>two late lower versions ("Ignored"): renumber yours, -outOfOrder=true for the production hotfix</span> <span class="lvl twist">Twist</span></label></li>
     <li><label><input type="checkbox" data-id="migrations-14"> <code>labs/06-migrations/14-twist-history-detective</code>
-      <span>answer questions from flyway_schema_history (installed_rank, baseline, checksum), then repair a comment-only edit</span> <span class="lvl twist">Twist</span></label></li>
+      <span>answer questions from flyway info (run order, schema version, Out of Order, baseline), then repair a comment-only edit</span> <span class="lvl twist">Twist</span></label></li>
   </ul></div>
 
   <div class="cheat"><h3>Cheat sheet</h3><ul>
@@ -2597,10 +2642,10 @@ UPDATE users SET user_name = full_name;</pre><p>ADD COLUMN alone gives NULLs. Co
     <li><code>flyway baseline -baselineVersion=02</code> adopt an existing DB</li>
     <li><code>flyway migrate -outOfOrder=true</code> apply a lower version that arrived late</li>
     <li><code>03_add_x.up.sql</code> / <code>03_add_x.down.sql</code> course naming; <code>V3__add_x.sql</code> Flyway default</li>
-    <li><code>sqlite3 shop.db</code> then <code>.tables</code> <code>.schema t</code> <code>.quit</code>; SQL ends with <code>;</code></li>
-    <li><code>sqlite3 -header -column shop.db "SELECT * FROM flyway_schema_history;"</code> read the history</li>
-    <li><code>sqlite3 shop.db &lt; file.sql</code> run a down file by hand (on a copy to test)</li>
-    <li><code>sqlite3 shop.db "DELETE FROM flyway_schema_history WHERE version='03';"</code> after running 03's down</li>
+    <li><code>flyway migrate -skipExecutingMigrations=true -target=03</code> record 03 without running it (SQL was run by hand, identical)</li>
+    <li>Files panel: <b>+ New file</b> <code>migrations/03_x.up.sql</code>, write, <b>Ctrl+S</b> (save before you migrate)</li>
+    <li>info states: Success, Pending, Failed (repair), Baseline / Ignored (Baseline), Ignored + Out of Order, Outdated / Superseded (R__)</li>
+    <li>No undo in Flyway free: roll forward with the next migration; still write a <code>.down.sql</code> for each</li>
     <li>Never edit an applied migration: write the next one</li>
     <li>Hand-run SQL = schema changed, no history row = runner fails with "already exists"</li>
     <li>Down of DROP COLUMN = column back, all NULL. Only a backup restores values.</li>
@@ -3885,7 +3930,7 @@ Dependency violation: billing → user
 <span class="p">$</span> git log --oneline | wc -l                <span class="c"># how many commits on this branch</span>
 <span class="p">$</span> git show main:greet.py                   <span class="c"># a file's content as stored at a branch</span>
 <span class="p">$</span> docker ps -a ; docker images ; docker volume ls
-<span class="p">$</span> sqlite3 shop.db ".schema"                <span class="c"># current database schema</span></pre>
+<span class="p">$</span> flyway info                              <span class="c"># which migrations are applied / pending (run inside work/)</span></pre>
 </section>
 
 </main>

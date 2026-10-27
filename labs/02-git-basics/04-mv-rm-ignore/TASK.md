@@ -17,7 +17,11 @@ In **one** commit with message `Tidy repository`:
 1. Rename `utils.py` to `helpers.py` using git.
 2. Delete `old_notes.txt` using git.
 3. Stop tracking `.env` but **keep the file on disk** (your app still needs it).
-4. Add a `.gitignore` with the line `.env` so it never gets staged again.
+4. Add a `.gitignore` with the line `.env` so it never gets staged again (Files panel: **+ New file**
+   `.gitignore`, type the line, save with Ctrl+S):
+   ```
+   .env
+   ```
 
 ## Stop
 Exactly one new commit. `.env` must still exist locally.

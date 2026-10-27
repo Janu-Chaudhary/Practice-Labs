@@ -2,29 +2,45 @@
 
 ```bash
 cd work
-sqlite3 -header -column shop.db "SELECT installed_rank, version, script, checksum, success FROM flyway_schema_history;"
-#  3 rows; the R__active_users.sql row has an EMPTY version (repeatables have no version)
-echo "ALTER TABLE users ADD COLUMN city TEXT;" > migrations/V3__add_city.sql      # versioned: runs once
-code migrations/R__active_users.sql      # or nano; change the SELECT line to:  SELECT id, name, city FROM users WHERE active = 1;
-#   (one-liner instead of an editor:  sed -i 's/SELECT id, name FROM/SELECT id, name, city FROM/' migrations/R__active_users.sql)
+flyway info
+#  | Versioned  | 1 | create users | SQL | ... | Success |
+#  | Versioned  | 2 | create orders| SQL | ... | Success |
+#  | Repeatable |   | active users | SQL | ... | Success |   <- Category "Repeatable", Version EMPTY
+```
+In the Files panel click **+ New file**, type `migrations/V3__add_city.sql`, write (versioned: runs once):
+```sql
+ALTER TABLE users ADD COLUMN city TEXT;
+```
+Save with **Ctrl+S**. Then open `migrations/R__active_users.sql` and change the SELECT line, so the file is:
+```sql
+-- Repeatable: Flyway re-runs this file whenever its checksum changes.
+DROP VIEW IF EXISTS active_users;
+CREATE VIEW active_users AS
+  SELECT id, name, city FROM users WHERE active = 1;
+```
+Save with **Ctrl+S**.
+```bash
 flyway info                              # old R active users row "Outdated" (checksum changed), plus a new
                                          # R active users row "Pending" (the re-run to come); V3 Pending
-cat > migrations/R__user_order_totals.sql <<'SQL'
+```
+**+ New file** `migrations/R__user_order_totals.sql`:
+```sql
 DROP VIEW IF EXISTS user_order_totals;
 CREATE VIEW user_order_totals AS
   SELECT user_id, SUM(total) AS order_total FROM orders GROUP BY user_id;
-SQL
+```
+Save with **Ctrl+S**.
+```bash
 flyway info                              # + R user order totals Pending
 flyway migrate                           # runs V3, then R active users, then R user order totals
 flyway info                              # all Success; the old R active users row shows as "Superseded"
-sqlite3 -header -column shop.db "SELECT * FROM active_users;"        # id name city: Asha, Meera (city empty)
-sqlite3 -header -column shop.db "SELECT * FROM user_order_totals;"   # 1 1249 / 3 400
-sqlite3 -header -column shop.db "SELECT installed_rank, version, script, checksum FROM flyway_schema_history;"
-#  R__active_users.sql appears twice with DIFFERENT checksums
+                                         # -> R__active_users.sql now has 2 rows: Superseded + Success
+flyway validate                          # Successfully validated
 ```
 
 **Why each step**
-- The history row of a repeatable has `version` NULL: Flyway identifies it by description and checksum.
+- A repeatable has no version (empty Version column in `flyway info`, NULL in the history table):
+  Flyway identifies it by description and checksum.
 - V3 is a new versioned file: schema changes to tables are append-only, one new version each time.
 - The view is redefined by **editing** its repeatable. The new checksum makes Flyway mark it Outdated and
   re-run it. No new version number needed, and git shows the view's full current definition in one file.

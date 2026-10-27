@@ -7,7 +7,7 @@
 **Task** (inside `work/`):
 1. Run `flyway migrate` and read the error.
 2. Tell Flyway "this database is already at version 02" with `flyway baseline`, then check `flyway info`.
-3. Apply 03 with `flyway migrate`.
+3. Apply 03 with `flyway migrate`, then run `flyway info` once more.
 
 **Stop:** don't delete `shop.db` or the orders (deleting the file and migrating from zero would lose the 3 orders).
 

@@ -1,7 +1,23 @@
 # Solution - 06-quiz-duplicate-email
 
-Add to `test_signup.py`:
+In the Files panel open `test_signup.py` and add the new test at the end, so it reads:
 ```python
+from signup import FakeUserRepo, signup
+
+
+def test_signup_creates_user():
+    repo = FakeUserRepo()
+    status = signup(repo, "user@example.com")
+    assert status == 201
+    assert repo.find("user@example.com") is not None
+
+
+def test_signup_rejects_invalid_email():
+    repo = FakeUserRepo()
+    assert signup(repo, "not-an-email") == 400
+    assert repo.count() == 0
+
+
 def test_signup_rejects_duplicate_email():
     # Arrange
     repo = FakeUserRepo()
@@ -12,16 +28,26 @@ def test_signup_rejects_duplicate_email():
     assert status == 409
     assert repo.count() == 1
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest                                  # 1 failed: assert 201 == 409  (red = bug reproduced)
 git add test_signup.py
 git commit -m "Add failing test for duplicate email signup"
 ```
-Fix `signup.py`, inside `signup` before `repo.save(email)`:
+Now the fix. In the Files panel open `signup.py` and add two lines inside `signup`, before
+`repo.save(email)`, so the function reads:
 ```python
+def signup(repo, email):
+    """Create an account. Returns an HTTP-style status code:
+    201 created, 400 invalid email, 409 email already in use."""
+    if "@" not in email:
+        return 400
     if repo.find(email) is not None:
         return 409
+    repo.save(email)
+    return 201
 ```
+(The `FakeUserRepo` class above it stays as it is.) Save with Ctrl+S. Then:
 ```bash
 pytest                                  # 3 passed
 git add signup.py

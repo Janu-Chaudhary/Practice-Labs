@@ -4,7 +4,16 @@
 cd work
 pytest              # runs every test_*.py file; shows one F and the failure details
 echo $?             # 1  -> "some tests failed" (0 = all passed, 5 = no tests collected, 2/4 = interrupted / usage error)
-printf 'test_total_with_tax_adds_15_percent\n1\n5\n15.0\n' > answer.txt
+```
+In the Files panel click **+ New file**, type `answer.txt`, and make it read:
+```
+test_total_with_tax_adds_15_percent
+1
+5
+15.0
+```
+Save with Ctrl+S. Then:
+```bash
 cd .. && ./check.sh
 ```
 

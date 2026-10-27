@@ -1,7 +1,7 @@
 # Solution - 13-twist-cache-retag
 
 ## 1. Dockerfile for the cache
-`code Dockerfile`:
+In the Files panel open `Dockerfile` and make it read:
 ```dockerfile
 FROM node:24-alpine
 LABEL course.lab=lab13
@@ -12,24 +12,38 @@ COPY . .
 EXPOSE 3000
 CMD ["node", "server.js"]
 ```
+Save with Ctrl+S.
 Why: `RUN npm ci` now depends only on the two manifest files. Editing `server.js` changes only the
 input of `COPY . .`, so only that step (and the ones after it) rerun. Before, `COPY . .` came first,
 so **any** file change invalidated `COPY . .` and therefore `npm ci` after it.
 
 ## 2. .dockerignore
-```bash
-cd work
-printf 'logs\nnode_modules\n.git\n.env\n' > .dockerignore
+Click **+ New file** in the Files panel, type `.dockerignore`, and make it read:
 ```
+logs
+node_modules
+.git
+.env
+```
+Save with Ctrl+S.
 Why: `COPY . .` copies the whole build context. Without the ignore file the 30 MB log and the
 laptop's `node_modules` go into the image (and are sent to the builder on every build).
 `node_modules` must be created by `npm ci` **inside** the image, for the image's OS.
 
 ## 3-4. Two builds, the second one logged
+In the Files panel open `server.js` and change only the VERSION line, so it reads:
+```js
+const http = require("node:http");
+const VERSION = "1.1";
+http.createServer((req, res) => res.end(`shop ${VERSION}\n`))
+  .listen(3000, "0.0.0.0", () => console.log(`shop ${VERSION} listening on 3000`));
+```
+Save with Ctrl+S. Then in the terminal (inside `work/`):
 ```bash
-code server.js                       # const VERSION = "1.1";
 docker build -t lab13-shop:1.1 .     # first build with the new Dockerfile: npm ci runs once
-code server.js                       # const VERSION = "1.2";
+```
+Back in the editor, change that line to `const VERSION = "1.2";` and save with Ctrl+S. Then:
+```bash
 docker build --progress=plain -t lab13-shop:1.2 . 2>&1 | tee build-1.2.log
 ```
 In the output / log:

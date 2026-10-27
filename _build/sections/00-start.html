@@ -21,13 +21,13 @@
   </ol>
 
   <h3 class="sub" id="start-tool">The Lab Practice Tool (quiz-style screen)</h3>
-  <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
+  <p>This is the easiest way to practise: a browser page laid out like your quiz. You get the task, a file panel to open, create and edit files, a <b>real terminal</b>, and a <b>Check</b> button that shows ✓/✗ for each check. Start it from a terminal:</p>
   <pre class="term"><span class="p">$</span> cd Practice-Labs         <span class="c"># the folder you cloned (wherever it lives)</span>
 <span class="p">$</span> ./start-lab-tool.sh
 <span class="c"># opens http://127.0.0.1:8765 in your browser. Leave this terminal open; Ctrl+C stops the tool.</span></pre>
   <ol class="steps">
     <li>Pick a lab on the left. Its <code>work/</code> folder is built automatically the first time.</li>
-    <li>Read the task. Edit files in the panel (<kbd>Ctrl</kbd>+<kbd>S</kbd> saves) and type commands in the terminal.</li>
+    <li>Read the task. Edit files in the Files panel, like the quiz: click a file to open it, <b>+ New file</b> creates one (e.g. <code>migrations/03_add_x.sql</code>), <kbd>Ctrl</kbd>+<kbd>S</kbd> saves. Type only commands (git, docker, flyway, pytest…) in the terminal.</li>
     <li>Press <b>✓ Check</b>. Passed labs get a ✓ in the list.</li>
     <li>Press <b>↺ Reset lab</b> to start that lab over, then solve it again from memory.</li>
   </ol>
@@ -36,7 +36,7 @@
   </div>
 
   <h3 class="sub" id="start-labs">Running a lab from your own terminal</h3>
-  <p>You can also do every lab in a normal terminal or VS Code. Every lab is a folder with four files:</p>
+  <p>You can also do every lab in a normal terminal, editing files in any editor. Every lab is a folder with four files:</p>
   <div class="grid2">
     <div class="card"><h4><code>TASK.md</code></h4>The situation and the task, worded like the quiz. Read it first.</div>
     <div class="card"><h4><code>setup.sh</code></h4>Builds a fresh <code>work/</code> folder with the scenario. Run it again any time to start over.</div>
@@ -44,7 +44,7 @@
     <div class="card"><h4><code>SOLUTION.md</code></h4>The exact commands with a why for each, and common wrong attempts. Open it only after trying.</div>
   </div>
   <pre class="term"><span class="p">$</span> cd labs/01-shell/01-files-and-folders   <span class="c"># from the Practice-Labs folder</span>
-<span class="p">$</span> cat TASK.md            <span class="c"># or: code TASK.md  (opens in VS Code)</span>
+<span class="p">$</span> cat TASK.md            <span class="c"># read the task</span>
 <span class="p">$</span> ./setup.sh             <span class="c"># builds work/ fresh</span>
 <span class="p">$</span> cd work                <span class="c"># you solve the task in here</span>
 <span class="c">#   ... your commands ...</span>
@@ -85,7 +85,7 @@
     <tr><td><code>clear</code> or <kbd>Ctrl</kbd>+<kbd>L</kbd></td><td>Clears the screen.</td></tr>
     <tr><td><code>pwd</code></td><td>Prints where you are. Check this whenever a path "doesn't exist".</td></tr>
     <tr><td><code>cmd --help</code></td><td>Shows a command's options. The quiz allows this, so use it.</td></tr>
-    <tr><td><code>code file</code></td><td>Opens a file in VS Code. This stands in for the quiz's file panel.</td></tr>
+    <tr><td><code>cat file</code></td><td>Prints a file so you can read it in the terminal. To <i>change</i> a file, use the Files panel instead.</td></tr>
   </tbody></table>
 
   <h3 class="sub" id="start-editors">Stuck inside an editor? (the merge-commit trap)</h3>

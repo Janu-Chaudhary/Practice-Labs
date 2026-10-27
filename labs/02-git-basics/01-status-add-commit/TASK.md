@@ -19,7 +19,11 @@ and the server wrote a `debug.log` that must never be committed.
 ## Task
 1. Run `git status` and `git diff` first and read them (which location is each file in?).
 2. Commit **only** `app/server.py` with message `Handle empty payload`.
-3. Create a `.gitignore` containing the line `*.log`.
+3. Create a `.gitignore` containing the line `*.log`: in the Files panel click **+ New file**, type
+   `.gitignore`, type this one line, save with Ctrl+S:
+   ```
+   *.log
+   ```
 4. Commit `routes/webhooks.py` and `.gitignore` together with message `Add webhook route`.
 
 ## Stop

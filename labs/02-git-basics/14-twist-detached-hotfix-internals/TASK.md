@@ -18,12 +18,13 @@ Context: a customer still runs release `v1.0` (an annotated tag). In v1.0, confi
 Part A: hotfix the old release
 1. Check out the commit that `v1.0` points to. Git will say you are in **'detached HEAD'** state:
    HEAD points at a commit, not at a branch.
-2. Make config.py exactly `RETRIES = 3` and commit it with message `Fix retries for 1.0`.
+2. In the Files panel open `config.py`, make it exactly `RETRIES = 3`, save with Ctrl+S, and commit it
+   with message `Fix retries for 1.0`.
 3. Save that commit on a new branch called `v1-hotfix` (it must contain v1.0's history + your fix only).
 4. Go back to main.
 
-Part B: look inside the object database. Create a file `answers.txt` (it is git-ignored for you)
-with exactly three lines:
+Part B: look inside the object database. Find the answers with commands in the terminal, then create
+`answers.txt` in the Files panel (**+ New file**; it is git-ignored for you) with exactly three lines:
 1. the hash of the **tree** that your v1-hotfix commit points to (full hash or at least 7 chars)
 2. the object **type** of `v1.0` (one word)
 3. the name of the other file in main's tree that has the **same blob hash** as `banner.txt`
@@ -34,7 +35,7 @@ Hints:
 - Order matters in Part A: if you leave the detached commit before giving it a branch, no branch
   points to it. Git prints a warning with its hash; you could still rescue it with
   `git branch v1-hotfix <hash>`.
-- Write answers.txt with your editor, or with `echo ... >> answers.txt` one line at a time.
+- Copy the tree hash from the terminal output and paste it into answers.txt. One answer per line, save with Ctrl+S.
 
 ## Stop
 Don't touch main or the v1.0 tag. One commit only (the fix). Don't merge v1-hotfix anywhere.

@@ -6,7 +6,15 @@ git log --all --oneline -- .env          # every commit that touched .env (newes
 git log --all --oneline --diff-filter=A -- .env   # only the commit that Added it: 677777a
 git branch leak 677777a                  # YOUR hash
 git show 677777a:.env                    # DB_PASSWORD=Summer2024!  (file as it was in that commit)
-echo ".env" >> .gitignore                # >> appends (creates .gitignore if missing)
+```
+
+Editor: Files panel -> **+ New file** -> `.gitignore`, type this one line, save with Ctrl+S.
+Why: git will now skip `.env` in `git status` and `git add .`.
+```
+.env
+```
+
+```bash
 git add .gitignore
 git commit -m "Ignore .env"
 git status                               # .env no longer listed as untracked
@@ -28,5 +36,6 @@ Notes
 
 Common wrong attempts
 - `git add .` then commit -> commits your local .env too. (Check with `git status` before commit.)
-- `echo ".env" > .gitignore` is fine here (no .gitignore yet), but `>` would wipe an existing one.
+- Naming the new file `gitignore` (no dot) -> git doesn't read it, `git status` still lists `.env`.
+  The name must be exactly `.gitignore`.
 - Adding .gitignore AFTER `git add .env` -> .gitignore doesn't untrack files already staged/tracked.

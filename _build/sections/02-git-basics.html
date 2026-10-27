@@ -156,7 +156,7 @@ def greet(name):
 &gt;&gt;&gt;&gt;&gt;&gt;&gt; feature</pre>
   <p>The steps, always the same:</p>
   <ol>
-    <li>Open the file (<code>code greet.py</code> / <code>nano greet.py</code>). Delete the 3 marker lines and write the final text the task asks for. Save.</li>
+    <li>Open the file in the Files panel (it shows the markers). Delete the 3 marker lines and write the final text the task asks for. Save with <code>Ctrl+S</code>.</li>
     <li>Check no markers are left: <code>grep -n '&lt;&lt;&lt;&lt;&lt;&lt;&lt;\|=======\|&gt;&gt;&gt;&gt;&gt;&gt;&gt;' greet.py</code> prints nothing.</li>
     <li><code>git add greet.py</code>: "add" here means <b>mark as resolved</b>.</li>
     <li><code>git commit --no-edit</code> (keeps git's "Merge branch 'feature'" message) or <code>git commit -m "..."</code>.</li>
@@ -176,7 +176,7 @@ fatal: You have not concluded your merge (MERGE_HEAD exists).</pre><p><b>Means:<
 
   <!-- ============ EDITOR ============ -->
   <h3 class="sub" id="git-editor">The editor trap: commit without -m</h3>
-  <p><code>git commit</code> without <code>-m</code>, and a merge that makes a merge commit, open a text editor for the message. On this machine the default is <b>vim</b> (no <code>core.editor</code> is set). The message is already filled in; you only need to save and quit.</p>
+  <p>You change <b>files</b> in the Files panel editor. But <code>git commit</code> without <code>-m</code>, and a merge that makes a merge commit, open a <b>different</b> text editor, inside the terminal, for the commit message. On this machine the default is <b>vim</b> (no <code>core.editor</code> is set). The message is already filled in; you only need to save and quit.</p>
   <table class="cmd"><thead><tr><th>Editor</th><th>How to recognise it</th><th>Save + quit</th></tr></thead><tbody>
     <tr><td>vim</td><td>screen full of <code>~</code> lines, no menu</td><td>press <code>Esc</code>, type <code>:wq</code>, Enter</td></tr>
     <tr><td>nano</td><td>menu at the bottom: <code>^O Write Out  ^X Exit</code></td><td><code>Ctrl+O</code>, Enter, <code>Ctrl+X</code></td></tr>
@@ -193,10 +193,10 @@ fatal: You have not concluded your merge (MERGE_HEAD exists).</pre><p><b>Means:<
     <tr><td><code>git rm old.txt</code></td><td>delete on disk + stage the deletion</td></tr>
     <tr><td><code>git rm --cached .env</code></td><td>stop tracking, <b>keep the file on disk</b></td></tr>
     <tr><td><code>git rm -r --cached folder/</code></td><td>same for a folder</td></tr>
-    <tr><td><code>echo '*.log' &gt;&gt; .gitignore</code></td><td>future <code>git add</code> skips matching untracked files</td></tr>
+    <tr><td><code>.gitignore</code> (make it with <b>+ New file</b>, one pattern per line, e.g. <code>*.log</code>)</td><td>future <code>git add</code> skips matching untracked files</td></tr>
   </tbody></table>
   <p>Plain <code>mv</code>/<code>rm</code> also work, but then git sees a deletion and a new untracked file, and you must <code>git add -A</code> to stage both.</p>
-  <div class="callout trap"><strong>Trap</strong><p><code>.gitignore</code> only affects <b>untracked</b> files. If <code>.env</code> was already committed, adding it to .gitignore does nothing; you need <code>git rm --cached .env</code> as well. Patterns: <code>*.log</code> any .log file, <code>node_modules/</code> a folder, <code>.env</code> one file. Always quote patterns in echo.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p><code>.gitignore</code> only affects <b>untracked</b> files. If <code>.env</code> was already committed, adding it to .gitignore does nothing; you need <code>git rm --cached .env</code> as well. Patterns: <code>*.log</code> any .log file, <code>node_modules/</code> a folder, <code>.env</code> one file. The file name must be exactly <code>.gitignore</code> (with the dot, no <code>.txt</code>).</p></div>
 
   <!-- ============ STASH ============ -->
   <h3 class="sub" id="git-stash">stash: a drawer for unfinished work</h3>
@@ -236,7 +236,7 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 1 Q16: fix-greeting branch</summary>
     <div class="body"><p>On main with one commit "Add greet" (<code>return "Hello " + name</code>). Create and switch to <code>fix-greeting</code>, change the line to <code>return f"Hello, {name}!"</code>, commit "Use f-string in greeting", stay on fix-greeting.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git switch -c fix-greeting
-<span class="p">$</span> code greet.py        <span class="c"># edit + SAVE</span>
+<span class="c"># Files panel: open greet.py, make line 2  return f"Hello, {name}!"  then Ctrl+S</span>
 <span class="p">$</span> git diff             <span class="c"># check: only the return line</span>
 <span class="p">$</span> git add greet.py
 <span class="p">$</span> git commit -m "Use f-string in greeting"
@@ -246,7 +246,8 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Quiz 1 Q17: resolve the conflict, main has 4 commits</summary>
     <div class="body"><p>main and feature both changed greet.py's return line after "Add greet". Merge feature into main, make the line <code>return f"Hi there, {name}! Welcome back."</code>, finish the merge with git's own message.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git merge feature                 <span class="c"># CONFLICT in greet.py</span>
-<span class="p">$</span> code greet.py                     <span class="c"># remove markers, write the new line, save</span>
+<span class="c"># Files panel: open greet.py, remove the 3 marker lines and both old lines,</span>
+<span class="c">#   write  return f"Hi there, {name}! Welcome back."  then Ctrl+S</span>
 <span class="p">$</span> git add greet.py                  <span class="c"># mark resolved</span>
 <span class="p">$</span> git commit --no-edit              <span class="c"># or: git commit, then :wq in vim</span>
 <span class="p">$</span> git rev-list --count main
@@ -276,7 +277,7 @@ Please commit your changes or stash them before you merge.</pre><p><b>Means:</b>
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Conflict in two files, keep the other side's whole file</summary>
     <div class="body"><p>Merge reports conflicts in greet.py and config.py. The task: config.py = feature's version, greet.py = a combination you type.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git checkout --theirs config.py   <span class="c"># theirs = branch being merged in</span>
-<span class="p">$</span> code greet.py                     <span class="c"># hand-combine, remove markers</span>
+<span class="c"># Files panel: open greet.py, hand-combine the line, remove the markers, Ctrl+S</span>
 <span class="p">$</span> git add config.py greet.py
 <span class="p">$</span> git status                        <span class="c"># All conflicts fixed but you are still merging.</span>
 <span class="p">$</span> git commit --no-edit</pre></details>
@@ -308,7 +309,7 @@ f84 Fix divide by zero
     <div class="body"><p><code>git status</code> says "You have unmerged paths", both modified: app.py. A teammate started <code>git merge experiment</code>, but experiment must never reach main. You need to merge <code>feature</code>, where both sides added a different last line to requirements.txt and both lines must stay.</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git merge --abort                       <span class="c"># back to main's tip, no merge in progress</span>
 <span class="p">$</span> git merge feature                       <span class="c"># CONFLICT in requirements.txt</span>
-<span class="p">$</span> code requirements.txt                   <span class="c"># delete only the 3 marker lines, keep both lines</span>
+<span class="c"># Files panel: open requirements.txt, delete only the 3 marker lines, keep both lines, Ctrl+S</span>
 <span class="p">$</span> git add requirements.txt
 <span class="p">$</span> git commit --no-edit</pre><p>Running <code>git merge feature</code> first fails ("Merging is not possible because you have unmerged files"). Fixing app.py and committing would finish the experiment merge. "Keep both" means removing <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> and keeping the text from both halves (HEAD's half first).</p></details>
     </div></details>
@@ -316,7 +317,7 @@ f84 Fix divide by zero
   <details class="scenario"><summary><span class="lvl twist">Twist</span> Hotfix an old tagged release + read the objects</summary>
     <div class="body"><p>main is 2 commits past the annotated tag <code>v1.0</code>. Make a fix commit on top of v1.0 only, keep it on a branch <code>v1-hotfix</code>, and return to main. Then answer: what is the type of <code>v1.0</code>? Which tree does your new commit point to? Two files in main's tree have the same content. How do you show that git stores them once?</p>
       <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> git switch --detach v1.0                <span class="c"># or git checkout v1.0 -&gt; detached HEAD</span>
-<span class="p">$</span> echo "RETRIES = 3" &gt; config.py
+<span class="c"># Files panel: open config.py, make it  RETRIES = 3 , Ctrl+S</span>
 <span class="p">$</span> git commit -am "Fix retries for 1.0"
 <span class="p">$</span> git switch -c v1-hotfix                 <span class="c"># give the detached commit a name NOW</span>
 <span class="p">$</span> git switch main
@@ -370,7 +371,7 @@ f84 Fix divide by zero
     <li><code>git branch name</code> create only; <code>git branch</code> list</li>
     <li><code>git merge feature</code> bring feature INTO the current branch</li>
     <li><code>git merge feature --no-edit</code> merge commit without the editor</li>
-    <li>conflict: edit file, remove markers → <code>git add f</code> → <code>git commit --no-edit</code></li>
+    <li>conflict: open the file in the Files panel, remove markers, Ctrl+S → <code>git add f</code> → <code>git commit --no-edit</code></li>
     <li><code>git merge --abort</code> undo a merge in progress</li>
     <li>vim: <code>Esc :wq Enter</code>; nano: <code>Ctrl+O Enter Ctrl+X</code>; <code>git config --global core.editor nano</code></li>
     <li><code>git rm --cached f</code> untrack but keep; <code>git mv a b</code> rename</li>

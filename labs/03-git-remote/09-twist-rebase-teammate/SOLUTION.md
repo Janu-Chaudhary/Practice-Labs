@@ -4,9 +4,21 @@
 git push                    # ! [rejected] main -> main (fetch first)
 git pull --rebase           # CONFLICT (content): Merge conflict in routes.txt
 git status                  # interactive rebase in progress; both modified: routes.txt
-code routes.txt             # (or nano) remove <<<<<<< ======= >>>>>>> lines, keep orders/health/search
+```
+
+Editor: open `routes.txt` in the Files panel (it shows the conflict, see below). Delete the
+`<<<<<<<`, `=======` and `>>>>>>>` lines, keep all three routes in this order, save with Ctrl+S:
+```
+GET /orders
+GET /health
+GET /search
+```
+
+Back in the terminal:
+```bash
+grep -n '<<<<<<<\|=======\|>>>>>>>' routes.txt   # prints nothing = no markers left
 git add routes.txt          # mark the conflict resolved
-git rebase --continue       # editor opens with "Add search endpoint": save + close
+git rebase --continue       # terminal editor opens with "Add search endpoint": vim :wq Enter
                             # (non-interactive: GIT_EDITOR=true git rebase --continue)
 git log --oneline --graph   # straight line: search -> health -> orders
 git push

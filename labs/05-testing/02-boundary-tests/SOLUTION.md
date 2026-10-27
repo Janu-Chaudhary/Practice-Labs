@@ -1,10 +1,25 @@
 # Solution - 02-boundary-tests
 
-Add to `test_age.py` (top of file gets `import pytest`):
+In the Files panel open `test_age.py`. Add `import pytest` at the top and the three tests at the
+end, so it reads:
 
 ```python
 import pytest
 from age import is_adult
+
+
+def test_thirty_year_old_is_adult():
+    # Arrange
+    age = 30
+    # Act
+    result = is_adult(age)
+    # Assert
+    assert result is True
+
+
+def test_five_year_old_is_not_adult():
+    assert is_adult(5) is False
+
 
 def test_seventeen_is_not_adult():      # boundary, one below
     assert is_adult(17) is False
@@ -16,6 +31,7 @@ def test_negative_age_is_rejected():    # invalid input
     with pytest.raises(ValueError):
         is_adult(-1)
 ```
+Save with Ctrl+S. Then:
 
 ```bash
 pytest -v          # -v = one line per test, with PASSED/FAILED

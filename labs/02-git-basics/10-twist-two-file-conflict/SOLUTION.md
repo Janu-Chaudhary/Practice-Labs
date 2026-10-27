@@ -9,10 +9,19 @@ git status
 #   Unmerged paths:            both modified: config.py, greet.py
 git checkout --theirs config.py   # take feature's whole version of this file
 #   (--ours = the branch you are on, main; --theirs = the branch being merged in)
-code greet.py                     # combine by hand, delete markers:
-#       return f"Hi, {name}! Good to see you."
-#   no-editor equivalent:
-#   printf 'def greet(name):\n    return f"Hi, {name}! Good to see you."\n' > greet.py
+```
+
+Editor: open `greet.py` in the Files panel, delete the 3 marker lines and both old return lines, write
+the combined line, save with Ctrl+S. Why by hand: neither side's line is the one the task wants.
+The file must end up exactly:
+```python
+def greet(name):
+    return f"Hi, {name}! Good to see you."
+```
+
+Back in the terminal:
+```bash
+grep -n '<<<<<<<\|=======\|>>>>>>>' greet.py config.py   # prints nothing = no markers left
 git add config.py greet.py        # mark both resolved
 git status                        # "All conflicts fixed but you are still merging."
 git commit --no-edit

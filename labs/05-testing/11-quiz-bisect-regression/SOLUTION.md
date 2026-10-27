@@ -1,14 +1,15 @@
 # Solution - 11-quiz-bisect-regression
 
-Inside `work/`:
-```bash
-cat > test_regression.py <<'EOF'
+In the Files panel click **+ New file**, type `test_regression.py`, and make it read:
+```python
 from pricing import bulk_discount
 
 
 def test_exactly_ten_items_get_discount():
     assert bulk_discount(10) == 0.10
-EOF
+```
+Save with Ctrl+S. Then in the terminal, inside `work/`:
+```bash
 pytest -q                           # 1 failed (assert 0.0 == 0.1), 4 passed: bug reproduced
 git bisect start                    # begin a bisect session
 git bisect bad                      # the current commit (HEAD) is bad
@@ -17,18 +18,32 @@ git bisect run pytest -q test_regression.py
                                     # git runs the test on each middle commit by itself
                                     # last lines:  <hash> is the first bad commit ... Tidy pricing code
 git bisect log | tail -1            # "# first bad commit: [<hash>] Tidy pricing code" (if it scrolled away)
-echo <hash> > answer.txt            # paste the hash bisect printed (7+ characters)
 git show <hash>                     # see the culprit: "if qty >= BULK_MIN" became "if qty > BULK_MIN"
 git bisect reset                    # end bisect, back on main at the newest commit
 git status                          # On branch main; test_regression.py untracked
 ```
+In the Files panel click **+ New file**, type `answer.txt`, and paste the hash bisect printed
+(7+ characters) as line 1, e.g.:
+```
+e660570
+```
+Save with Ctrl+S. (`answer.txt` is in `.gitignore`, so git ignores it.)
 Commit 1, the failing test:
 ```bash
 git add test_regression.py
 git commit -m "Add failing test for exactly 10 items bulk discount"
 ```
-Commit 2, the fix: in `pricing.py` change `if qty > BULK_MIN:` to `if qty >= BULK_MIN:`
-(`code pricing.py`, or `sed -i 's/qty > BULK_MIN/qty >= BULK_MIN/' pricing.py`).
+Commit 2, the fix: in the Files panel open `pricing.py` and change `if qty > BULK_MIN:` to
+`if qty >= BULK_MIN:`, so `bulk_discount` reads:
+```python
+def bulk_discount(qty):
+    """Orders of 10 or more items get 10% off. Returns the discount rate."""
+    rate = 0.0
+    if qty >= BULK_MIN:
+        rate = BULK_RATE
+    return rate
+```
+Save with Ctrl+S. Then:
 ```bash
 pytest -q                           # 5 passed
 git add pricing.py

@@ -24,7 +24,7 @@ There is no `reports` folder yet. Run every command from `work/` and search the 
 
 ## Stop
 - Don't change, move or delete anything inside `shop`.
-- Every report is the output of commands saved with `>` (no editor).
+- Every report is the output of commands saved with `>`. Don't type or fix reports in the editor.
 
 ## Hints
 - `grep -r PATTERN shop` searches every file in `shop` and its sub-folders and prefixes each line with the path.

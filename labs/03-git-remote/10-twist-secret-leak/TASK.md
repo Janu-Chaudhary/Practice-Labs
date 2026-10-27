@@ -22,8 +22,9 @@ local one (untracked) and must stay that way.
 1. Find the commit that first added `.env` (search the history *of that path*, not the current
    files). Create a branch `leak` pointing at it, so the security team can inspect it.
 2. Look at what leaked: print `.env` *as it was in that commit* (don't copy the value anywhere).
-3. Make sure `.env` can never be committed again: add `.env` to `.gitignore` and commit only
-   `.gitignore` with message `Ignore .env`.
+3. Make sure `.env` can never be committed again: create `.gitignore` in the Files panel
+   (**+ New file**) with the line `.env`, save with Ctrl+S, and commit only `.gitignore` with
+   message `Ignore .env`.
 
 **Stop:** never commit `.env`, don't delete your local `.env`.
 

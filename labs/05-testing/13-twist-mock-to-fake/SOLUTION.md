@@ -1,6 +1,6 @@
 # Solution - 13-twist-mock-to-fake
 
-Replace `test_orders.py` with (`code test_orders.py`):
+In the Files panel open `test_orders.py`, delete everything, and make it read:
 ```python
 from orders import place_order
 
@@ -43,19 +43,27 @@ def test_qty_11_rejected_and_not_stored():
     assert place_order(repo, "pen", 11) == 400
     assert repo.all() == []
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest -q        # 2 failed: assert [{'item': 'pen', 'qty': 0}] == []  -> rejected orders ARE stored
 git add test_orders.py
 git commit -m "Replace mock with fake repo; add failing test for stored rejected orders"
 ```
-Fix `orders.py`: validate **before** saving. `place_order` becomes:
+Fix `orders.py`: validate **before** saving. In the Files panel open `orders.py` and move the `if`
+above the save, so `place_order` reads (the `PostgresOrderRepo` class stays as it is):
 ```python
+def place_order(repo, item, qty):
+    """Place an order. Returns an HTTP-style status code:
+    201 = created and stored
+    400 = qty must be from 1 to 10; a rejected order must NOT be stored
+    """
     if qty < 1 or qty > 10:
         return 400
     order = {"item": item, "qty": qty}
     repo.save(order)
     return 201
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest -q        # 4 passed
 git add orders.py

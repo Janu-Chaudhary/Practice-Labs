@@ -17,8 +17,9 @@ push to and fetch from. (It is hidden from `git status` for you.)
 **Task:**
 1. Add `remote.git` as a remote called `origin`. Check it with `git remote -v`.
 2. Push `main` to `origin` and make `main` track `origin/main` (use `-u`).
-3. Create `docs.md` (any content), commit it with message `Add docs`, and push it with plain
-   `git push` (no extra words: `-u` from step 2 is what makes this work).
+3. Create `docs.md` in the Files panel (**+ New file**, type any content, e.g. `# Docs`, save with
+   Ctrl+S). Commit it with message `Add docs`, and push it with plain `git push` (no extra words:
+   `-u` from step 2 is what makes this work).
 
 **Stop:** don't create other branches.
 

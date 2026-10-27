@@ -11,7 +11,7 @@ Two separate leaks: `ENV` writes the value into the image config (every layer st
 `docker history`), and `COPY . .` with no `.dockerignore` copies `.env` into a layer.
 
 ## 2-3. Fix and rebuild
-Edit `Dockerfile` (`code Dockerfile`) and delete the two `ENV DB_...` lines:
+In the Files panel open `Dockerfile` and delete the two `ENV DB_...` lines, so it reads:
 ```dockerfile
 FROM node:24-alpine
 WORKDIR /app
@@ -21,8 +21,14 @@ COPY . .
 EXPOSE 3000
 CMD ["node", "server.js"]
 ```
+Save with Ctrl+S. Then click **+ New file**, type `.dockerignore`, and make it read:
+```
+.env
+node_modules
+.git
+```
+Save with Ctrl+S. Why: every path listed here stays out of the build context, so `COPY . .` can't copy it.
 ```bash
-printf '.env\nnode_modules\n.git\n' > .dockerignore   # keep these out of the build context
 docker build -t lab10-payments:1.1 .                 # the "." context no longer contains .env
 docker run --rm lab10-payments:1.1 cat /app/.env     # cat: can't open '/app/.env': No such file  (good)
 ```
