@@ -46,6 +46,7 @@ class Terminal:
         self.buf = ""
         self.base = 0  # absolute offset of buf[0]
         self.gen = 0   # bumps every restart so the browser can clear its screen
+        self.size = (30, 100)  # rows, cols: last size the browser reported, given to every new shell
 
     def start(self, cwd):
         self.stop()
@@ -55,6 +56,8 @@ class Terminal:
         if pid == 0:
             os.chdir(cwd)
             os.execvpe("bash", ["bash", "--norc", "-i"], env)
+        # a fresh pty is 0x0; without the real width bash wraps long lines in the wrong place
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", *self.size, 0, 0))
         with self.lock:
             self.pid, self.fd, self.buf, self.base = pid, fd, "", 0
             self.gen += 1
@@ -106,6 +109,7 @@ class Terminal:
             os.write(self.fd, data.encode())
 
     def resize(self, cols, rows):
+        self.size = (rows, cols)
         if self.fd is not None:
             fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 

@@ -83,6 +83,7 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 
 #termPane{flex:1;background:var(--term)}
 #termPane .pane-h{background:var(--term);color:#8b949e;border-color:#2a2f37}
+#termPane .pane-h .hint{text-transform:none;letter-spacing:0;font-weight:400;font-size:11.5px;color:#6e7681}
 #termPane .pane-h .btn{background:transparent;color:#c9d1d9;border-color:#333a44}
 #term{flex:1;min-height:0;padding:6px 0 0 8px}
 #results{flex:0 0 auto;max-height:45%;display:none;flex-direction:column;border-top:1px solid var(--line)}
@@ -147,7 +148,7 @@ aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto
 
   <div class="col" style="border-right:0">
     <div class="pane" id="termPane">
-      <div class="pane-h">Terminal<span class="sp"></span><button class="btn" id="clearBtn">Clear</button></div>
+      <div class="pane-h">Terminal<span class="sp"></span><span class="hint">Select text, then Ctrl+C or Ctrl+Shift+C copies · Ctrl+V pastes</span><button class="btn" id="clearBtn">Clear</button></div>
       <div id="term"></div>
     </div>
     <div class="pane" id="results">
@@ -205,8 +206,21 @@ function renderSide(){
 const term=new Terminal({fontFamily:'"JetBrains Mono", ui-monospace, monospace',fontSize:13.5,cursorBlink:true,
   theme:{background:getComputedStyle(document.documentElement).getPropertyValue('--term').trim()||'#16181d'},scrollback:5000});
 const fit=new FitAddon.FitAddon();term.loadAddon(fit);term.open($('#term'));
-let tpos=0,tgen=-1,sendQ=Promise.resolve();
-term.onData(d=>{sendQ=sendQ.then(()=>api('/api/term/input',{data:d}));});
+let tpos=0,tgen=-1,pending='',sending=false;
+// keystrokes typed while a request is in flight go out together, in order
+async function flush(){if(sending||!pending)return;sending=true;const d=pending;pending='';
+  try{await api('/api/term/input',{data:d});}catch(e){}sending=false;flush();}
+term.onData(d=>{pending+=d;flush();});
+// copy/paste: Ctrl+C copies when text is selected (otherwise it is ^C), Ctrl+Shift+C always copies,
+// Ctrl+V / Ctrl+Shift+V paste. preventDefault stops Ctrl+Shift+C opening the browser's inspector.
+function copySel(){const s=term.getSelection();if(!s)return false;
+  navigator.clipboard.writeText(s).then(()=>toast('Copied'),()=>toast('Copy blocked by the browser'));term.clearSelection();return true;}
+term.attachCustomKeyEventHandler(e=>{
+  if(!(e.ctrlKey||e.metaKey)||e.altKey)return true;const k=e.key.toLowerCase();
+  if(k==='c'&&(e.shiftKey||term.hasSelection())){if(e.type==='keydown'){e.preventDefault();copySel()||toast('Select some text first');}return false;}
+  if(k==='v')return false;  // let the browser fire its paste event, which xterm turns into input
+  return true;});
+$('#term').addEventListener('contextmenu',e=>{if(copySel())e.preventDefault();});
 function doFit(){try{fit.fit();api('/api/term/resize',{cols:term.cols,rows:term.rows});}catch(e){}}
 new ResizeObserver(()=>doFit()).observe($('#term'));
 async function pollTerm(){
@@ -281,7 +295,7 @@ $('#setupBtn').onclick=async()=>{
   lastTree='';await loadTree();$('#results').classList.remove('show');
   toast(r.code===0?'Lab ready: fresh work/ folder':'setup.sh reported a problem, see terminal');
   if(r.code!==0){showResults('Setup output',r.output,false);}
-  term.focus();
+  doFit();term.focus();
 };
 function showResults(head,text,ok){
   $('#resultsHead').firstChild.textContent=head;$('#resultsHead').className='pane-h '+(ok?'ok':'bad');
