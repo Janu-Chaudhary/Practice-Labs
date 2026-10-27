@@ -224,6 +224,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send({"ok": True})
             if u.path == "/api/file":
                 p = safe_path(b["path"])
+                if b.get("create"):  # "+ New file": make parent folders, never overwrite
+                    if p.exists():
+                        return self.send({"error": f"{b['path']} already exists"}, 400)
+                    p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(b["text"], encoding="utf-8")
                 return self.send({"ok": True, "mtime": p.stat().st_mtime})
             self.send({"error": "not found"}, 404)

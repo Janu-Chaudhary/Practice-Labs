@@ -84,6 +84,10 @@ body.dragging #term,body.dragging #editor{pointer-events:none}
 #task ul,#task ol{padding-left:20px}
 #task table{border-collapse:collapse}#task td,#task th{border:1px solid var(--line);padding:4px 8px}
 #filesPane{flex:1}
+.newfile{display:none;gap:6px;padding:6px 10px;border-bottom:1px solid var(--line);flex:none}
+.newfile.show{display:flex}
+.newfile input{flex:1;min-width:0;font:12.5px "JetBrains Mono",monospace;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink)}
+.newfile .btn{font-size:12px;padding:3px 10px}
 .files-body{display:grid;grid-template-columns:min(var(--tree-w),60%) 1px minmax(0,1fr);flex:1;min-height:0}
 #tree{overflow-y:auto;overflow-x:hidden;padding:6px 0;font-size:13px}
 #tree div{padding:3px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;font-family:"JetBrains Mono",monospace;font-size:12.5px}
@@ -169,7 +173,8 @@ body.dragging #term,body.dragging #editor{pointer-events:none}
     </div>
     <div class="gutter row" data-g="task"></div>
     <div class="pane" id="filesPane">
-      <div class="pane-h">Files <span style="text-transform:none;letter-spacing:0;font-weight:400">(work/)</span><span class="sp"></span><button class="btn" id="refreshBtn">Refresh</button></div>
+      <div class="pane-h">Files <span style="text-transform:none;letter-spacing:0;font-weight:400">(work/)</span><span class="sp"></span><button class="btn" id="newBtn" disabled title="Create a file in work/ (folders are created too)">+ New file</button><button class="btn" id="refreshBtn">Refresh</button></div>
+      <form class="newfile" id="newForm"><input id="newPath" placeholder="path inside work/, e.g. migrations/03_add_x.sql" autocomplete="off" spellcheck="false" aria-label="New file path"><button class="btn primary">Create</button><button class="btn" type="button" id="newCancel">Cancel</button></form>
       <div class="files-body">
         <div id="tree"></div>
         <div class="gutter" data-g="tree"></div>
@@ -292,6 +297,7 @@ let openPath=null,openMtime=0,dirty=false,lastTree='';
 async function loadTree(){
   if(!current)return;
   const r=await api('/api/files');const tree=$('#tree');
+  $('#newBtn').disabled=!r.ready;
   if(!r.ready){tree.innerHTML='';lastTree='';showNoWork();return;}
   const sig=JSON.stringify(r.files.map(f=>[f.path,f.mtime]));
   if(sig!==lastTree){lastTree=sig;
@@ -329,6 +335,19 @@ $('#editor').addEventListener('keydown',e=>{
   if(e.key==='Tab'){e.preventDefault();const t=e.target,s=t.selectionStart;t.setRangeText('    ',s,t.selectionEnd,'end');dirty=true;setState();}
 });
 $('#saveBtn').onclick=save;$('#refreshBtn').onclick=()=>{lastTree='';loadTree();};
+// "+ New file": suggest the open file's folder, create it empty, open it in the editor
+function hideNew(){$('#newForm').classList.remove('show');}
+$('#newBtn').onclick=()=>{const f=$('#newForm');if(f.classList.contains('show')){hideNew();return;}
+  const i=$('#newPath');i.value=openPath&&openPath.includes('/')?openPath.replace(/[^/]*$/,''):'';f.classList.add('show');i.focus();};
+$('#newCancel').onclick=hideNew;
+$('#newPath').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();hideNew();}});
+$('#newForm').onsubmit=async e=>{e.preventDefault();
+  const p=$('#newPath').value.trim().replace(/^\.?\/+/,'');
+  if(!p||p.endsWith('/')){toast('Type a file name, e.g. '+(p||'')+'notes.txt');return;}
+  if(dirty&&!confirm('You have unsaved changes. Discard them?'))return;dirty=false;
+  const r=await api('/api/file',{path:p,text:'',create:true});
+  if(r.error){toast(r.error);return;}
+  hideNew();lastTree='';await loadTree();await openFile(p);$('#editor').focus();toast('Created '+p);};
 setInterval(()=>{if(!document.hidden)loadTree();},1500);
 
 // ---------- lab actions ----------
