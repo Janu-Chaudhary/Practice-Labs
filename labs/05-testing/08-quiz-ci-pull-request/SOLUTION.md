@@ -1,6 +1,7 @@
 # Solution - 08-quiz-ci-pull-request
 
-`.github/workflows/ci.yml` becomes:
+In the Files panel open `.github/workflows/ci.yml`. Add the `pull_request` trigger and delete the
+`continue-on-error: true` line, so it reads:
 ```yaml
 name: CI
 
@@ -14,16 +15,33 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      ...                      # unchanged
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
       - name: Run unit tests
-        run: pytest -q         # continue-on-error line deleted
+        run: pytest -q
 ```
+Save with Ctrl+S. Then:
 ```bash
-code .github/workflows/ci.yml                   # edit as above, save
 python3 -c "import yaml; print(yaml.safe_load(open('.github/workflows/ci.yml')))"   # quick syntax check
 git add .github/workflows/ci.yml
 git commit -m "Run CI on pull requests to main"
-echo test > answer.txt                          # the job id is the key under jobs:
+```
+In the Files panel click **+ New file**, type `answer.txt`, and make it read (the job id is the key
+under `jobs:`):
+```
+test
+```
+Save with Ctrl+S. Then:
+```bash
 cd .. && ./check.sh
 ```
 

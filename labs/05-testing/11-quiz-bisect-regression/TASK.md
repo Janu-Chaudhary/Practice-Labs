@@ -27,10 +27,11 @@ the middle commit; with `git bisect run <command>` git runs the command on each 
 
 ## Task
 1. Write a regression test that checks 10 items get the discount (for example
-   `assert bulk_discount(10) == 0.10`). Put it in a **new file** `test_regression.py` (an untracked
-   file stays in place while bisect checks out old commits). Run `pytest` and see it fail.
+   `assert bulk_discount(10) == 0.10`). Put it in a **new file** `test_regression.py` (Files panel, **+ New file**; an
+   untracked file stays in place while bisect checks out old commits). Run `pytest` and see it fail.
 2. Use `git bisect` with `git bisect run` and your test to find the **first bad commit**.
-3. Write its hash (at least 7 characters) as line 1 of `answer.txt` (it is in `.gitignore`, don't commit it).
+3. Write its hash (at least 7 characters) as line 1 of `answer.txt` (create it with **+ New file**; it is in
+   `.gitignore`, don't commit it).
 4. Stop bisecting: `git bisect reset` (puts you back on main).
 5. Then the usual two commits on `main`:
    1. the regression test only (message contains `failing test`)

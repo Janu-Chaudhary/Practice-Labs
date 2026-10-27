@@ -3,7 +3,8 @@
 **Context:** setup started a container named `notes-api` for you. You don't know which host port it
 uses, and some information exists only in its logs or only inside its filesystem.
 
-**Task:** fill in `work/answers.txt` (edit it with `code answers.txt` or `nano answers.txt`):
+**Task:** fill in `work/answers.txt`. Open it in the Files panel, type each value after its `=`,
+and save with Ctrl+S. Use the terminal only for the docker commands that find the values.
 
 ```
 port=<the HOST port that is published to container port 3000>

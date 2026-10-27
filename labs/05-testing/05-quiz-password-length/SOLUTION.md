@@ -3,17 +3,37 @@
 ```bash
 cat validate.py                       # see the bug: len(password) > 8  (8 is NOT > 8)
 pytest                                # 2 passed - the existing tests miss the boundary
-code test_validate.py                 # add the test below, save
 ```
+In the Files panel open `test_validate.py`, add the new test at the end, so it reads:
 ```python
+from validate import is_valid_length
+
+
+def test_rejects_short_password():
+    assert is_valid_length("abc") is False
+
+
+def test_accepts_long_password():
+    assert is_valid_length("correcthorsebattery") is True
+
+
 def test_accepts_exactly_eight_characters():
     assert is_valid_length("abcdefgh") is True
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest                                # 1 failed, 2 passed  -> red: the test catches the bug
 git add test_validate.py              # ONLY the test file
 git commit -m "Add failing test for 8-character password"
-code validate.py                      # change  > 8  to  >= 8
+```
+In the Files panel open `validate.py`, change `> 8` to `>= 8`, so it reads:
+```python
+def is_valid_length(password):
+    """A password needs at least 8 characters."""
+    return len(password) >= 8
+```
+Save with Ctrl+S. Then:
+```bash
 pytest                                # 3 passed -> green
 git add validate.py
 git commit -m "Fix password length check to accept 8 characters"

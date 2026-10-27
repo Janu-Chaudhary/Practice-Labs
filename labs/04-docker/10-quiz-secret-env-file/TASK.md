@@ -36,6 +36,8 @@ as a file. The server reads `DB_HOST` and `DB_PASSWORD` from the environment and
 form (`ENV`, `ARG`, `RUN echo ...`). Only `lab10-payments:1.1` may remain.
 
 **Hints**
+- Edit `Dockerfile` in the Files panel and save with Ctrl+S. Create `.dockerignore` with
+  **+ New file** (one path per line). The terminal is only for the docker commands.
 - `docker history --no-trunc IMAGE` shows the instruction behind every layer. `ENV` lines show up there.
 - To read a file inside an image without starting the server: `docker run --rm IMAGE cat /app/.env`.
 - `docker run --help | grep env` lists two flags. One reads a whole file of `KEY=value` lines.

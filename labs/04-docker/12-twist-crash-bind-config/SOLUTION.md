@@ -7,8 +7,12 @@ docker ps                                       # empty: it is not running
 docker ps -a                                    # lab12-report  Exited (3) ...
 docker logs lab12-report                        # FATAL: cannot read /config/settings.json (ENOENT). Mount your config folder at /config.
 docker inspect -f '{{.State.ExitCode}}' lab12-report    # 3
-echo "first_exit_code=3" > answers.txt
 ```
+In the Files panel open `answers.txt`, make it read
+```
+first_exit_code=3
+```
+and save with Ctrl+S.
 `docker run -d` only reports that the container **started**. If the main process exits, the
 container exits with it. `ps -a` + `logs` is the first move every time.
 
@@ -28,22 +32,30 @@ docker logs lab12-report                        # FATAL: /config/settings.json i
 - Progress: the exit code changed from 3 (file missing) to 4 (file found but broken).
 
 ## 3. Fix the file on the host, start the same container
-```bash
-code config/settings.json        # remove the comma after "ops" (JSON allows no trailing comma)
-docker start lab12-report        # same container, same mount, re-reads the file at start
-curl http://127.0.0.1:8112/      # report: Daily report
-```
-Fixed file:
+In the Files panel open `config/settings.json` and remove the comma after `"ops"` (JSON allows no
+trailing comma), so it reads:
 ```json
 {
   "title": "Daily report",
   "owner": "ops"
 }
 ```
+Save with Ctrl+S. Then:
+```bash
+docker start lab12-report        # same container, same mount, re-reads the file at start
+curl http://127.0.0.1:8112/      # report: Daily report
+```
 
 ## 4. Change the config, restart, no rebuild
+In the Files panel open `config/settings.json` again, make it read
+```json
+{
+  "title": "Weekly report",
+  "owner": "ops"
+}
+```
+and save with Ctrl+S. Then:
 ```bash
-code config/settings.json        # "title": "Weekly report"
 docker exec lab12-report cat /config/settings.json   # already shows Weekly: same folder, live view
 curl http://127.0.0.1:8112/      # still "report: Daily report": the app read the file at start
 docker restart lab12-report      # process starts again and reads the new file

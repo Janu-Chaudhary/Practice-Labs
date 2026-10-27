@@ -35,8 +35,12 @@ docker exec -it lab11-web sh                                   # or a shell: try
 ```bash
 docker network inspect lab11-net              # "Containers": lab11-api ... "IPv4Address": "172.21.0.2/16"
 docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' lab11-api   # 172.21.0.2
-echo "api_ip=172.21.0.2" > answers.txt        # use YOUR number, without the /16
 ```
+In the Files panel open `answers.txt`, make it read (use YOUR number, without the `/16`)
+```
+api_ip=172.21.0.2
+```
+and save with Ctrl+S.
 Why use the name and not the IP: the IP can change when the container is recreated; the name stays.
 
 ## Common wrong attempts

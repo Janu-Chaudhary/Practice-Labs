@@ -3,14 +3,26 @@
 ```bash
 python3 mutants.py      # all 3 SURVIVED: "abc" (3) and a 19-char password give the same answer for all of them
 ```
-Add to `test_validate.py`:
+In the Files panel open `test_validate.py` and add two tests at the end, so it reads:
 ```python
+from validate import is_valid_length
+
+
+def test_rejects_short_password():
+    assert is_valid_length("abc") is False
+
+
+def test_accepts_long_password():
+    assert is_valid_length("correcthorsebattery") is True
+
+
 def test_accepts_exactly_eight_characters():   # kills  > 8  and  >= 9  (8 chars would be rejected)
     assert is_valid_length("abcdefgh") is True
 
 def test_rejects_seven_characters():           # kills  >= 7  (7 chars would be accepted)
     assert is_valid_length("abcdefg") is False
 ```
+Save with Ctrl+S. Then:
 ```bash
 pytest                  # 4 passed on the real code
 python3 mutants.py      # All mutants killed.

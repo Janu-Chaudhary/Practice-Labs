@@ -9,7 +9,7 @@ docker build -t shop-api:1.0 .
 ```
 `RUN npm ci` runs before anything was copied into `/app`, so there is no package-lock.json yet.
 
-Fixed Dockerfile (edit with `code Dockerfile`, only move lines):
+In the Files panel open `Dockerfile` and only move lines, so it reads:
 ```dockerfile
 FROM node:24-alpine
 WORKDIR /app
@@ -19,6 +19,7 @@ COPY . .
 EXPOSE 3000
 CMD ["node", "server.js"]
 ```
+Save with Ctrl+S, then in the terminal:
 ```bash
 docker build -t shop-api:1.0 .
 docker image ls shop-api            # shop-api 1.0 ...
@@ -30,9 +31,12 @@ Why this order:
    them, so this layer comes from the cache.
 3. `COPY . .` last: server.js changes only invalidate this step and the ones after it.
 
-Bonus check of the cache:
+Bonus check of the cache: in the Files panel open `server.js`, make it read
+```js
+console.log("shop-api v2")
+```
+and save with Ctrl+S. Then:
 ```bash
-echo 'console.log("shop-api v2")' > server.js
 docker build -t shop-api:1.0 .      # WORKDIR, COPY package*, RUN npm ci -> CACHED ; COPY . . reruns
 ```
 

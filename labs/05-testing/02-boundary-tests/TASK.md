@@ -6,7 +6,7 @@ raises `ValueError`. `test_age.py` only tests normal cases (30 and 5). Most real
 edge of a condition, so the suite is weak.
 
 ## Task
-Add three tests to `test_age.py` (open it with `code test_age.py` or `nano test_age.py`):
+Add three tests to `test_age.py` (open it in the Files panel, save with Ctrl+S):
 1. **Boundary, below**: 17 is not an adult.
 2. **Boundary, at**: exactly 18 is an adult.
 3. **Invalid**: `is_adult(-1)` raises `ValueError`. Use `pytest.raises` (you need `import pytest` at the top).

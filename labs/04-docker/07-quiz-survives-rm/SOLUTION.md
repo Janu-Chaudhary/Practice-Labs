@@ -15,8 +15,12 @@ docker run -d --name tally-web -p 127.0.0.1:8082:3000 \
   --mount type=volume,src=tally-data,dst=/data --cpus=0.5 --memory=256m tally:1.0
 curl http://127.0.0.1:8082/      # count=5  (new container, same volume)
 docker logs tally-web            # listening on 3000 / request count=5  (a new container has new logs)
-echo "no_volume_count=1" > answers.txt
 ```
+In the Files panel open `answers.txt`, make it read
+```
+no_volume_count=1
+```
+and save with Ctrl+S.
 Why `no_volume_count=1`: without a volume, `/data/count.txt` lives in the container's writable layer.
 `docker rm` deletes that layer; a new container starts with an empty one, so the count starts again.
 

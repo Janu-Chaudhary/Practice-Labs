@@ -1,8 +1,11 @@
 # Solution - 03-test-that-asserts-nothing
 
-Edit `test_discount.py` (`code test_discount.py`):
+In the Files panel open `test_discount.py` and make it read:
 
 ```python
+from discount import apply_discount
+
+
 def test_ten_percent_off_200():
     # Arrange
     price, percent = 200, 10
@@ -10,7 +13,12 @@ def test_ten_percent_off_200():
     result = apply_discount(price, percent)
     # Assert
     assert result == 180
+
+
+def test_zero_percent_changes_nothing():
+    assert apply_discount(80, 0) == 80
 ```
+Save with Ctrl+S. Then:
 
 ```bash
 pytest                       # 1 failed, 1 passed: assert 190 == 180  -> red, as wanted

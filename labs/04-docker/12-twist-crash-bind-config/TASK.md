@@ -27,6 +27,8 @@ docker run -d --name lab12-report -p 127.0.0.1:8112:3000 lab12-report:1.0
 After step 2 don't remove `lab12-report` again (its logs are the proof of steps 3 and 4).
 
 **Hints**
+- Edit `config/settings.json` and `answers.txt` in the Files panel and save with Ctrl+S. The file
+  you see there is the host file that gets mounted.
 - A container that exited is only in `docker ps -a`. Its STATUS shows `Exited (N)`; `docker logs`
   works on stopped containers too. `docker inspect -f '{{.State.ExitCode}}' NAME` gives just N.
 - Bind mount = a host path on the left: `-v "$(pwd)/config":/config:ro`, or

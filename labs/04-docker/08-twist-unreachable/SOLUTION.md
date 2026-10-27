@@ -5,7 +5,19 @@ cd work
 curl http://localhost:8083/health   # curl: (52) Empty reply from server   (sometimes: (56) Connection reset by peer)
 docker ps                           # inventory Up, 0.0.0.0:8083->3000/tcp  -> publishing is fine
 docker logs inventory               # inventory listening on 127.0.0.1:3000  <- the cause
-code server.js                      # change  const HOST = "127.0.0.1";  to  const HOST = "0.0.0.0";
+```
+In the Files panel open `server.js` and change one line, so it reads:
+```js
+const http = require("node:http");
+const HOST = "0.0.0.0";
+const PORT = 3000;
+http.createServer((req, res) => {
+  if (req.url === "/health") return res.end("ok\n");
+  res.end(JSON.stringify({ items: ["bolt", "nut", "washer"] }) + "\n");
+}).listen(PORT, HOST, () => console.log(`inventory listening on ${HOST}:${PORT}`));
+```
+Save with Ctrl+S. Then in the terminal:
+```bash
 docker build -t inventory:1.1 .     # new image with the fix
 docker rm -f inventory              # old container must go (the name and port 8083 are taken)
 docker run -d --name inventory -p 8083:3000 inventory:1.1
