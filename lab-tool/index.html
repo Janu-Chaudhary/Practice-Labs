@@ -183,6 +183,12 @@ body.quiz-mode .labonly,body:not(.quiz-mode) .quizonly{display:none}
 .verdict.ok{background:var(--ok-bg);color:var(--ok)}.verdict.bad{background:var(--bad-bg);color:var(--bad)}
 .explain{border-top:1px solid var(--line);margin-top:14px;padding-top:6px}
 .qbar{display:flex;gap:8px;margin-top:18px;align-items:center;flex-wrap:wrap}
+.qnav{max-width:860px;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:5px;max-height:96px;overflow-y:auto;padding:2px}
+.qn{min-width:32px;height:28px;padding:0 6px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:7px;font:600 12px "JetBrains Mono",monospace}
+.qn:hover{border-color:var(--accent);color:var(--accent)}
+.qn.ok{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.qn.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.qn.cur{outline:2px solid var(--accent);outline-offset:1px;color:var(--ink)}
 .qdone h2{margin:0 0 6px}.qdone .big{font-size:40px;font-weight:700;margin:10px 0}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
 .toast.show{opacity:1}
@@ -507,6 +513,12 @@ $('#sideBtn').onclick=()=>setSide(document.body.classList.contains('noside-mode'
 let TQ=null,tqTopic='all',tqFilter='all',tqList=[],tqIdx=0,tqPicked=new Set(),tqChecked=false;
 let tqState={};try{tqState=JSON.parse(store.get('labtool-theory')||'{}')||{};}catch(e){}
 const saveTq=()=>store.set('labtool-theory',JSON.stringify(tqState));
+// where the student was: last topic + filter, and the question index per topic/filter
+let tqView={};try{tqView=JSON.parse(store.get('labtool-theory-view')||'{}')||{};}catch(e){}
+const tqKey=()=>tqTopic+'|'+tqFilter;
+function tqSaveView(){tqView.topic=tqTopic;tqView.filter=tqFilter;tqView.pos=tqView.pos||{};tqView.pos[tqKey()]=tqIdx;store.set('labtool-theory-view',JSON.stringify(tqView));}
+const tqSavedIdx=()=>(tqView.pos&&tqView.pos[tqKey()])||0;
+function tqGo(i){tqIdx=Math.max(0,Math.min(i,tqList.length));renderTq();}
 const letter=i=>String.fromCharCode(65+i);
 async function loadTheory(){
   const doc=new DOMParser().parseFromString(await fetch('/guide').then(r=>r.text()),'text/html');
@@ -540,30 +552,36 @@ function renderTqSide(){
       .map(([k,l])=>`<button class="btn${tqFilter===k?' primary':''}" data-f="${k}" aria-pressed="${tqFilter===k}">${l}</button>`).join('')}</div>`
     +row('all','All topics',TQ.qs)+TQ.topics.map(t=>row(t.id,t.name,t.qs)).join('')
     +`<div class="legend"><button class="btn" id="tqReset">Reset scores</button></div>`;
-  side.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tqTopic=b.dataset.t;tqIdx=0;tqBuildList();renderTq();});
-  side.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{tqFilter=b.dataset.f;tqIdx=0;tqBuildList();renderTq();});
+  side.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tqTopic=b.dataset.t;tqBuildList();tqIdx=tqSavedIdx();renderTq();});
+  side.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{tqFilter=b.dataset.f;tqBuildList();tqIdx=tqFilter==='all'?tqSavedIdx():0;renderTq();});
   $('#tqReset').onclick=()=>{if(confirm('Clear all your theory scores?')){tqState={};saveTq();tqBuildList();tqIdx=0;renderTq();}};
 }
 function renderTq(){
   renderTqSide();const main=$('#qmain');tqPicked=new Set();tqChecked=false;main.scrollTop=0;
   if(!tqList.length){main.innerHTML=`<div class="qcard empty">${tqFilter==='wrong'?'Nothing to redo here: no wrong answers. 🎉':tqFilter==='new'?'You have answered every question here.':'No questions found.'}</div>`;return;}
+  tqIdx=Math.max(0,Math.min(tqIdx,tqList.length));tqSaveView();
+  // number strip: jump straight to any question; green = right, red = wrong, outline = current
+  const strip=`<nav class="qnav" aria-label="Jump to question">${tqList.map((x,i)=>{const r=tqRes(x);
+    return `<button class="qn${r?(r.ok?' ok':' bad'):''}${i===tqIdx?' cur':''}" data-n="${i}" title="${esc(x.title)}"${i===tqIdx?' aria-current="true"':''}>${i+1}</button>`;}).join('')}</nav>`;
+  const wireStrip=()=>main.querySelectorAll('.qn').forEach(b=>b.onclick=()=>tqGo(+b.dataset.n));
   if(tqIdx>=tqList.length){  // end of the set: score summary
     const ok=tqList.filter(q=>tqRes(q)&&tqRes(q).ok).length,wrong=tqList.filter(q=>tqRes(q)&&!tqRes(q).ok).length;
-    main.innerHTML=`<div class="qcard empty qdone"><h2>End of this set</h2><div class="big">${ok} / ${tqList.length}</div><p>right${wrong?`, ${wrong} wrong`:''}</p>
+    main.innerHTML=strip+`<div class="qcard empty qdone"><h2>End of this set</h2><div class="big">${ok} / ${tqList.length}</div><p>right${wrong?`, ${wrong} wrong`:''}</p>
       <div class="qbar" style="justify-content:center">${wrong?'<button class="btn primary" id="tqRedo">Redo the wrong ones</button>':''}<button class="btn" id="tqAgain">Start this set again</button></div></div>`;
     if(wrong)$('#tqRedo').onclick=()=>{tqFilter='wrong';tqIdx=0;tqBuildList();renderTq();};
-    $('#tqAgain').onclick=()=>{tqIdx=0;tqBuildList();renderTq();};return;}
+    $('#tqAgain').onclick=()=>{tqIdx=0;tqBuildList();renderTq();};wireStrip();return;}
   const q=tqList[tqIdx],prev=tqRes(q),tname=(TQ.topics.find(t=>t.id===q.topic)||{}).name||'';
-  main.innerHTML=`<div class="qcard">
+  main.innerHTML=strip+`<div class="qcard">
     <div class="qmeta"><span class="lvl ${q.level}">${{drill:'Drill',quiz:'Quiz-style',twist:'Twist'}[q.level]||esc(q.level)}</span><span>${esc(tname)}</span><span class="sp"></span>
       ${prev?`<span class="${prev.ok?'okc':'badc'}">${prev.ok?'✓ right last time':'✗ wrong last time'}</span>`:''}<span>${tqIdx+1} / ${tqList.length}</span></div>
     <h2 class="qtitle"></h2><div class="qprompt">${q.prompt}</div>
-    <div class="qhint">${q.multi?'Choose all that apply.':'Choose one.'} Keys: A–${letter(q.options.length-1)} pick · Enter checks · → next</div>
+    <div class="qhint">${q.multi?'Choose all that apply.':'Choose one.'} Keys: A–${letter(q.options.length-1)} pick · Enter checks · ← → previous / next</div>
     <div class="opts" role="group" aria-label="Options">${q.options.map((o,i)=>`<button class="opt" role="${q.multi?'checkbox':'radio'}" aria-checked="false" data-i="${i}"><span class="key">${letter(i)}</span><span class="otext">${o}</span><span class="tag"></span></button>`).join('')}</div>
     <div class="verdict" id="tqVerdict" hidden></div><div class="explain" id="tqExplain" hidden>${q.explain}</div>
     <div class="qbar"><button class="btn" id="tqPrev" ${tqIdx===0?'disabled':''}>← Previous</button><span class="sp"></span>
-      <button class="btn" id="tqShow">Show answer</button><button class="btn primary" id="tqCheck">Check answer</button><button class="btn primary" id="tqNext" hidden>Next →</button></div></div>`;
-  main.querySelector('.qtitle').textContent=q.title;
+      <button class="btn" id="tqShow">Show answer</button><button class="btn primary" id="tqCheck">Check answer</button><button class="btn" id="tqNext">Skip →</button></div></div>`;
+  main.querySelector('.qtitle').textContent=q.title;wireStrip();
+  const cur=main.querySelector('.qn.cur');if(cur)cur.scrollIntoView({block:'nearest',inline:'nearest'});
   main.querySelectorAll('.opt').forEach(b=>b.onclick=()=>tqPick(+b.dataset.i));
   $('#tqPrev').onclick=()=>{tqIdx--;renderTq();};$('#tqNext').onclick=tqNext;
   $('#tqCheck').onclick=()=>tqCheck(false);$('#tqShow').onclick=()=>tqCheck(true);
@@ -580,11 +598,13 @@ function tqCheck(reveal){
     b.classList.add(c&&p?'right':p?'wrong':c?'missed':'dim');b.querySelector('.tag').textContent=c&&p?'✓ correct':p?'✗ not correct':c?(reveal?'✓ answer':'missed'):'';});
   const v=$('#tqVerdict');v.hidden=false;v.className='verdict '+(ok?'ok':'bad');
   v.textContent=reveal?'Answer: '+ans:ok?'Correct ✓':'Not quite. The answer is '+ans+'.';
-  $('#tqExplain').hidden=false;$('#tqCheck').hidden=$('#tqShow').hidden=true;$('#tqNext').hidden=false;$('#tqNext').focus();
-  tqState[q.id]={ok,at:Date.now()};saveTq();renderTqSide();}
+  $('#tqExplain').hidden=false;$('#tqCheck').hidden=$('#tqShow').hidden=true;
+  const nx=$('#tqNext');nx.textContent='Next →';nx.classList.add('primary');nx.focus();
+  tqState[q.id]={ok,at:Date.now()};saveTq();renderTqSide();
+  const n=$('#qmain').querySelector('.qn.cur');if(n)n.classList.add(ok?'ok':'bad');}
 function tqNext(){
-  if(tqFilter!=='all'){const cur=tqList[tqIdx];tqBuildList();const i=tqList.indexOf(cur);tqIdx=i>=0?i+1:tqIdx;}  // answered items may leave the filter
-  else tqIdx++;
+  if(tqChecked&&tqFilter!=='all'){const cur=tqList[tqIdx];tqBuildList();const i=tqList.indexOf(cur);tqIdx=i>=0?i+1:tqIdx;}  // an answered item may leave the filter
+  else tqIdx++;  // skipping, or the "All" filter
   renderTq();}
 addEventListener('keydown',e=>{
   if(!document.body.classList.contains('quiz-mode')||e.ctrlKey||e.metaKey||e.altKey||$('#solModal').classList.contains('show'))return;
@@ -592,7 +612,7 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k.length===1&&k>='a'&&k<='h'){e.preventDefault();tqPick(k.charCodeAt(0)-97);}
   else if(e.key==='Enter'&&tqList[tqIdx]&&!tqChecked&&!(document.activeElement&&document.activeElement.closest('#qside,.qbar'))){e.preventDefault();tqCheck(false);}
-  else if(e.key==='ArrowRight'&&tqChecked){e.preventDefault();tqNext();}
+  else if(e.key==='ArrowRight'&&tqIdx<tqList.length&&!(document.activeElement&&document.activeElement.closest('#qside'))){e.preventDefault();tqNext();}
   else if(e.key==='ArrowLeft'&&tqIdx>0&&!(document.activeElement&&document.activeElement.closest('#qside'))){e.preventDefault();tqIdx--;renderTq();}
 });
 async function setMode(quiz){
@@ -602,7 +622,10 @@ async function setMode(quiz){
   if(document.activeElement)document.activeElement.blur();  // keys must not reach the hidden terminal
   if(!TQ){$('#qmain').innerHTML='<div class="qcard empty">Loading questions…</div>';
     try{TQ=await loadTheory();}catch(e){$('#qmain').innerHTML='<div class="qcard empty">Could not load the questions from guide.html.</div>';return;}
-    tqBuildList();}
+    // reopen where the student left off
+    if(tqView.topic&&(tqView.topic==='all'||TQ.topics.some(t=>t.id===tqView.topic)))tqTopic=tqView.topic;
+    if(['all','new','wrong'].includes(tqView.filter))tqFilter=tqView.filter;
+    tqBuildList();tqIdx=tqSavedIdx();}
   renderTq();
 }
 $('#modeBtn').onclick=()=>setMode(!document.body.classList.contains('quiz-mode'));
