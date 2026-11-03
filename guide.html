@@ -3656,6 +3656,19 @@ $ docker exec t5-db psql -U postgres -c 'ALTER TABLE orders RENAME COLUMN order_
       <details class="answer"><summary>Show answer</summary><p>At 10%: only meena (5). At 15%: meena and ravi (14 &lt; 15). Nobody turns off when the percentage goes up. For <code>new_menu</code>, no guarantee: the hash input is <code>"new_menu:meena"</code>, so her bucket is different. That's why the overlap of two 10% flags is about 1%, not 10%.</p></details>
     </div></details>
 
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="demos-01"> <code>labs/10-demos/01-pipeline-deploy-2.3</code>
+      <span>Start the platform, deploy v2.3 through the six gates (one build, two tags), traffic into a log</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="demos-02"> <code>labs/10-demos/02-bad-2.4-and-rollback</code>
+      <span>Deploy v2.4 (1 in 5 checkouts fail), find it in traffic.log and docker logs, ./rollback.sh 2.3; DB untouched</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="demos-03"> <code>labs/10-demos/03-rename-trap-fix-forward</code>
+      <span>Deploy 2.4-rename, roll back, healthy but every checkout fails; fix forward by renaming the column back</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="demos-04"> <code>labs/10-demos/04-flag-kill-switch</code>
+      <span>Deploy v2.5, flag on (group orders fail), flag off: fixed in seconds, same container</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="demos-05"> <code>labs/10-demos/05-rollout-buckets</code>
+      <span>Run rollout.js in Docker, answer who is ON at 10%/25%, edit flags.json in the Files panel</span> <span class="lvl drill">Drill</span></label></li>
+  </ul></div>
+
   <!-- ===================== CHEAT ===================== -->
   <div class="cheat"><h3>Cheat sheet</h3><ul>
     <li><code>./preflight.sh smoke</code> pull images, pre-build, check 8080, test once</li>
