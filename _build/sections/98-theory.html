@@ -2065,6 +2065,669 @@ LOG     waiting for a free connection (pool max_size=5)</pre>
       <details class="answer"><summary>Show answer</summary><p><b>C.</b> An orchestrator earns its cost when you must detect failures, schedule, place and reroute across many hosts. One small app at 40 requests a minute doesn't need that, so A and B buy the operating cost without the benefit. D adds the distributed-systems tax too. A PaaS is the lowest to start: it handles restarts, routing and TLS, and a managed database handles backups, patching and failover.</p></details>
     </div></details>
 
+<!-- ===================================================== -->
+  <h3 class="sub" id="theory-t5">Continuous safe delivery and the T5 demos (T5)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Detect, decide, act at TiffinGo</summary>
+    <div class="body"><pre class="term">19:00  TiffinGo v2.4 deploys "group order"
+19:02  Checkout returns errors for 1 in 5 orders
+19:09  Alert: errors above 2% for 5 minutes
+19:11  Deploy tiffingo:2.3
+19:12  Recovered</pre>
+      <p>Time to recover = detect + decide + act. Which split is right, and what does the slide say makes most outages long?</p>
+      <ol type="A">
+        <li>Detect 2 min, decide 7 min, act 1 min. Most outages are long because people take too long to decide.</li>
+        <li>Detect 9 min, decide 2 min, act 1 min. Most outages are long because deploys are slow.</li>
+        <li>Detect 7 min, decide 2 min, act 1 min. "Most outages are long because nobody noticed."</li>
+        <li>Detect 7 min, decide 1 min, act 2 min. Most outages are long because rollbacks are slow.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> Detect runs from the first error (19:02) to the alert (19:09), so 7 minutes. Decide runs from 19:09 to the redeploy at 19:11 (2 minutes), and act runs from 19:11 to 19:12 (1 minute). A swaps detect and decide. B starts the clock at the deploy (19:00), but nothing was broken until 19:02. D swaps decide and act. Detection was 7 of the 10 minutes, which is why the slide blames "nobody noticed", not slow fixing.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> No alert, just a tweet</summary>
+    <div class="body"><pre class="term">14:00  v3.2 deployed
+14:03  first payment errors appear in the logs
+14:21  a customer's angry tweet reaches the on-call engineer (no alert was set up)
+14:25  on-call decides to redeploy the previous image
+14:26  recovered</pre>
+      <p>Which statement is right?</p>
+      <ol type="A">
+        <li>Time to recover is 26 minutes. The biggest lever is a faster way back, such as a feature flag.</li>
+        <li>Time to recover is 23 minutes, and 18 of them are detection. An error-rate alert (like "errors above 2% for 5 minutes") is the biggest lever.</li>
+        <li>Time to recover is 23 minutes. Deciding (4 minutes) is the biggest part, so a written runbook would help most.</li>
+        <li>Time to recover is 1 minute, because only the act step counts.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> Detect 14:03 → 14:21 = 18, decide 14:21 → 14:25 = 4, act 14:25 → 14:26 = 1, total 23. A starts at the deploy (14:00), not at the first error. Also, the act step is already 1 minute, so a flag could save less than a minute. C: 4 minutes of deciding is much smaller than 18 minutes of not noticing. D leaves out detect and decide, which are part of the formula.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Rename, then redeploy 2.3</summary>
+    <div class="body"><p>v2.4's migration ran <code>ALTER TABLE orders RENAME COLUMN items TO order_items;</code> and v2.4 also has a checkout bug. You redeploy the previous image <code>tiffingo:2.3</code>. Its code runs <code>INSERT INTO orders (customer, items, total) VALUES (…)</code> for every checkout. What happens to checkout?</p>
+      <ol type="A">
+        <li>It recovers, because <code>tiffingo:2.3</code> is the exact image that worked at 18:59.</li>
+        <li>It recovers, because starting the old image runs its old migration again and brings <code>items</code> back.</li>
+        <li>Only group orders fail. Single orders work again.</li>
+        <li>Every checkout fails with <code>column "items" … does not exist</code>, because redeploying code never changes the schema.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> This is the slide-6 poll. The image holds code, not the schema. The database still has <code>order_items</code>, and v2.3 asks for <code>items</code>. A is true for the code but ignores the database it talks to. B is wrong because starting a container runs no migrations, and in the demo <code>rollback.sh</code> never touches the database. C is wrong because every insert names <code>items</code>, so single orders fail too, not only group orders.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Healthy, and 100% red</summary>
+    <div class="body"><p>In the demo, right after <code>./deploy.sh 2.4-rename</code>, the professor runs:</p>
+<pre class="term">$ ./rollback.sh 2.3
+...
+Back on v2.3 in 2.1 s.
+$ curl -s http://localhost:8080/healthz
+{"status":"ok","version":"2.3"}
+
+# Terminal 2 (traffic.sh): every line is red
+ERROR  column "items" of relation "orders" does not exist  (v2.3)</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The health check failed, so <code>rollback.sh</code> kept v2.4-rename live. That is why the errors continue.</li>
+        <li><code>/healthz</code> passes because it only runs <code>SELECT 1</code>. It checks that the database can be reached, not that checkout works.</li>
+        <li>Running <code>./deploy.sh 2.3</code> instead would fix it, because the pipeline would run 2.3's <code>migrate.sql</code> again and recreate <code>items</code>.</li>
+        <li><code>docker exec t5-db psql -U postgres -c '\d orders'</code> would list <code>order_items</code> and no <code>items</code>.</li>
+        <li><code>rollback.sh</code> started the old image, checked health and switched traffic. It ran no down migration and did not change <code>schema_migrations</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, D, E.</b> The code went back but the column didn't: "Code is reversible, data is not." A is wrong because <code>/healthz</code> reports 2.3 and the errors end in <code>(v2.3)</code>, so 2.3 is live. C is wrong twice. <code>schema_migrations</code> already has a row for 2.3, so the pipeline prints "already applied". And 2.3's file is <code>CREATE TABLE IF NOT EXISTS</code>, which does nothing to an existing table. The way out is to fix forward: <code>RENAME COLUMN order_items TO items</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> What the runner is</summary>
+    <div class="body"><p>A push to <code>main</code> starts a GitHub Actions job with the steps checkout, install, test and deploy. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The job runs on a fresh computer (the runner). It starts empty and is deleted when the job ends.</li>
+        <li>Files from last night's run, such as an installed <code>node_modules</code>, are still on the runner today unless you delete them.</li>
+        <li>If the test step exits with code 1, the deploy step never runs.</li>
+        <li>The deploy step should get the production database password from the repository's settings, for example <code>${{ secrets.DB_PASSWORD }}</code>.</li>
+        <li>Because the repository is private, it is fine to write the password into the workflow file.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, C, D.</b> The slide: the runner "starts empty, runs the steps, and is thrown away". Each step's exit code says pass or fail, and one failure stops the job. B is wrong because nothing carries over between runs. Anything you want to keep (like a cache) must be set up on purpose. E is wrong because secrets come from the repository's settings, never from the code. A private repo is still copied to every clone and stays in git history.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Stopped at stage 1</summary>
+    <div class="body"><pre class="term">$ ./deploy.sh 2.6
+Deploying TiffinGo v2.6   (live now: 2.5)
+[1/6] Test          unit tests in a fresh container
+  ✗ tests failed
+Pipeline stopped. Production is unchanged: still v2.5.</pre>
+      <p>What is the state after this run?</p>
+      <ol type="A">
+        <li>No <code>tiffingo:2.6</code> image was built, the 2.6 migration did not run, and v2.5 still serves every request.</li>
+        <li>The image <code>tiffingo:2.6</code> was built but not deployed.</li>
+        <li>The 2.6 migration ran, but the new code was not started.</li>
+        <li>v2.6 is serving traffic, but it is marked unhealthy.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Test is stage 1. <code>node --test</code> exits non-zero, so <code>deploy.sh</code> stops before build (2), migrate (3), deploy (4), health (5) and switch (6). That is the gate: "one failure stops the job". B and C describe stages that come after the failed one, so they never ran. D is wrong because traffic is switched only at stage 6.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> "Production is unchanged" … or is it?</summary>
+    <div class="body"><pre class="term">$ ./deploy.sh 2.6
+[1/6] Test          3 tests passed
+[2/6] Build         tiffingo:2.6 = tiffingo:5be20c4
+[3/6] Migrate       releases/2.6/migrate.sql
+         ALTER TABLE orders DROP COLUMN total;
+[4/6] Deploy        start v2.6 beside the old version (old one still serving)
+[5/6] Check health
+  ✗ new version is not healthy
+Pipeline stopped. Production is unchanged: still v2.5.</pre>
+      <p>v2.5's checkout runs <code>INSERT INTO orders (customer, items, total) …</code>. What is true now?</p>
+      <ol type="A">
+        <li>Nothing changed. The pipeline undid the migration when the health check failed.</li>
+        <li>v2.6 is serving traffic, because the switch happens before the health check.</li>
+        <li>The v2.6 container was removed and v2.5 still serves, but <code>total</code> is already gone, so v2.5's checkouts now fail.</li>
+        <li>v2.5 keeps working, because the migration ran inside the failed pipeline and so doesn't count.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> The pipeline migrates (step 3) before it starts the new code (step 4) and checks health (step 5). When health fails, <code>deploy.sh</code> only runs <code>docker rm -f</code> on the new container. It has no down migration, so "Production is unchanged" is true only for the code. A is wrong for that reason. B is wrong because the switch is stage 6, after health. D is wrong because the <code>DROP</code> committed in the database, whatever happened to the pipeline later. This is why every step-3 migration must work with the old code.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Two builds of one commit</summary>
+    <div class="body"><pre class="term">Mon  docker build -t shop:staging .     # commit 3f9a2c1, staging tests pass
+Thu  docker build -t shop:prod .        # the same commit 3f9a2c1</pre>
+      <p>The Dockerfile starts <code>FROM node:22</code> and runs <code>npm install</code>. On Thursday production fails, and staging is still fine. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>This can't happen: the same commit always gives the same image.</li>
+        <li>Thursday's build can differ. <code>node:22</code> may now point to a newer image, and <code>npm install</code> may pick newer dependency versions.</li>
+        <li>The slide's practice: build once, tag the image with the commit id (<code>shop:3f9a2c1</code>), and run that same image in staging and production.</li>
+        <li>The fix is to rebuild production with <code>--no-cache</code> so it matches staging.</li>
+        <li>With one image tagged by commit id, you know exactly which code is running, and the previous image is still there to redeploy.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, E.</b> "Rebuilding for each environment can produce a different image." So what staging tested is not what production runs. A is wrong for exactly that reason: a commit fixes your files, not the base image or the registry. D makes it worse, because <code>--no-cache</code> gives a fresh build with today's base image and dependencies, which is even further from Monday's. Promote the one tested image instead of "repacking" it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> The order of the steps</summary>
+    <div class="body"><p>Which order does the slide (and <code>deploy.sh</code>) use?</p>
+      <ol type="A">
+        <li>Build → Test → Deploy → Migrate → Check health</li>
+        <li>Test → Build → Deploy → Migrate → Check health</li>
+        <li>Test → Migrate → Build → Deploy → Check health</li>
+        <li>Test → Build → Migrate → Deploy → Check health</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> Test, build the image, migrate the database, deploy the new code, check health. The new code needs the new schema when it starts, so the migration comes first. A tests after building, so a failing test would come after you had already built the image. B starts new code before the schema it needs exists. C changes the database before you know the image even builds. Remember too that old code is still serving during steps 1 to 4.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Safe to run while v2.3 is serving?</summary>
+    <div class="body"><p>v2.3 runs <code>INSERT INTO orders (customer, items, total) VALUES (…)</code> and reads <code>items</code> and <code>total</code>. The <code>orders</code> table has 40,000 rows. The pipeline runs the next release's migration at step 3, while v2.3 is still serving. Which lines are safe to run then? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>ALTER TABLE orders ADD COLUMN group_id int;</code></li>
+        <li><code>ALTER TABLE orders RENAME COLUMN items TO order_items;</code></li>
+        <li><code>ALTER TABLE orders ADD COLUMN order_items text;</code></li>
+        <li><code>ALTER TABLE orders ADD COLUMN tip int NOT NULL;</code></li>
+        <li><code>ALTER TABLE orders DROP COLUMN total;</code></li>
+        <li><code>CREATE TABLE flags (name text PRIMARY KEY, enabled boolean NOT NULL);</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, C, F.</b> Adding a nullable column or a new table is additive, so old code just ignores it (the expand step). B breaks v2.3 straight away, exactly as in the demo's 2.4-rename deploy. E breaks v2.3's insert and reads. D fails on a table that has rows (the existing rows would be NULL). Even on an empty table, v2.3's inserts don't name <code>tip</code>, so they would break the NOT NULL rule.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> The contract shipped with a flag</summary>
+    <div class="body"><p>v3.1's migration ran <code>ALTER TABLE customers DROP COLUMN phone;</code>. v3.0's code still reads <code>phone</code>. v3.1 also added an "invoice PDF" feature behind the flag <code>invoice_pdf</code>. An hour later, the invoice feature turns out to be broken. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Redeploying the v3.0 image is the safest way back, because it comes from before both changes.</li>
+        <li>Reverting the v3.1 commit and running the pipeline brings <code>phone</code> back, because the migration file is then gone.</li>
+        <li>Switching <code>invoice_pdf</code> off still works. Nothing is deployed, and the v3.1 code, which matches the new schema, keeps running.</li>
+        <li>A down migration that re-adds <code>phone</code> brings back the phone numbers.</li>
+        <li>After the DROP, the old values can only come back from a backup. Going back in code can't do it.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C, E.</b> This is the outline's question: which way back is unavailable once the schema has changed? The answer is the previous image, and a revert, because both bring back code that reads <code>phone</code>. A: v3.0 would start, then fail on every query that reads <code>phone</code>. B: deleting a migration file undoes nothing. The runner only runs pending files, and the column stays dropped. D: a down migration recreates the column, but every value is NULL.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Why the redeploy is fast</summary>
+    <div class="body"><p><code>./rollback.sh 2.3</code> prints "nothing to test, build or migrate: the image already exists". It takes about 2 seconds locally, and the slide says about a minute on a hosted platform. Why is it faster than reverting the commit and deploying?</p>
+      <ol type="A">
+        <li><code>tiffingo:2.3</code> already exists, so only start, health check and switch run. A revert makes a new commit that goes through test, build, migrate and deploy again.</li>
+        <li>Rollback skips the health check, which is the slowest stage.</li>
+        <li>Docker kept the old v2.3 container running and warm, so nothing has to start.</li>
+        <li>Rollback restores a database snapshot along with the image, which saves the migrate step.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> "Redeploy the previous image: about a minute, nothing is rebuilt." A revert means "the pipeline runs again", which takes minutes. B is wrong because <code>rollback.sh</code> does run a health check (stage 2 of 3). C is wrong because the demo's switch removes the old container (<code>docker rm -f</code>). The rollback starts a new container from the old image. D is wrong because rollback never touches the database, which is the whole point of the rename part of the demo.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Split the bill charges the wrong friend</summary>
+    <div class="body"><p>v2.5 ships five changes. One of them, "split the bill", is behind the flag <code>split_bill</code>. Users report that it charges the wrong friend, and 600 wrong charges have been made so far. Which is the best fix, and what does it leave behind?</p>
+      <ol type="A">
+        <li>Redeploy v2.4. It removes the button and refunds the 600 charges.</li>
+        <li>Switch <code>split_bill</code> off. New wrong charges stop within seconds and the other four changes keep running. The 600 charges still need a separate fix, such as refunds.</li>
+        <li>Revert the commit and deploy. It is the fastest, because no image is involved.</li>
+        <li>Switch <code>split_bill</code> off. It stops new charges and reverses the 600, because the flag sends everything back to the old code path.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> The slide-16 poll answer is "switch the flag off": seconds, nothing deployed, and nothing else in v2.5 is thrown away. A throws away four good changes and refunds nothing: code going back doesn't touch data. C is the slowest way back, because the pipeline runs again, including building a new image. D is wrong because a flag changes what happens next. The charges already made are data, and "data is not reversible".</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> What the redeploy left behind</summary>
+    <div class="body"><p>v2.6 ran for 25 minutes at dinner time. Its bug did three things. It sent "Your group order is on the way!" by SMS to 3,000 customers whose orders were never placed. It overwrote <code>delivery_note</code> with NULL on 900 rows. And it deleted 40 saved carts. Its migration only added a nullable column. You redeploy <code>tiffingo:2.5</code>, and <code>/healthz</code> reports 2.5. What is still wrong? Choose all that apply.</p>
+      <ol type="A">
+        <li>The 3,000 SMS messages have been sent.</li>
+        <li>v2.5 crashes because of the new nullable column.</li>
+        <li>v2.6 keeps serving some requests after the switch.</li>
+        <li>The 900 delivery notes are still NULL.</li>
+        <li>The 40 carts are still gone.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D, E.</b> "Code is reversible. Data is not. Sent messages are forever." Overwritten and deleted rows come back only from a backup, and an SMS can't be unsent. B is wrong because old code ignores an extra nullable column. That is why the demo's first rollback from 2.4 (which only added <code>group_id</code>) worked. C is wrong because the switch sends all traffic to the redeployed version and removes the old container.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Green gates, red checkouts</summary>
+    <div class="body"><pre class="term">$ ./deploy.sh 2.4
+[1/6] Test          3 tests passed
+[2/6] Build         tiffingo:2.4 = tiffingo:ab12cd3
+[3/6] Migrate       ALTER TABLE orders ADD COLUMN IF NOT EXISTS group_id int;
+[4/6] Deploy        ...
+[5/6] Check health  {"status":"ok","version":"2.4"}
+[6/6] Switch        send traffic to v2.4
+
+# Terminal 2, every 5th line:
+ERROR  Cannot read properties of undefined (reading 'map')  (v2.4)</pre>
+      <p>Why didn't the pipeline's gates stop this release?</p>
+      <ol type="A">
+        <li>The tests ran on the developer's laptop instead of in a fresh container.</li>
+        <li>The image was rebuilt for production, so it differs from the tested one.</li>
+        <li>The tests only cover pricing, and <code>/healthz</code> only runs <code>SELECT 1</code>. Nothing tried a group order for a customer with no saved group (kabir).</li>
+        <li>The migration failed silently, so <code>group_id</code> is missing.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> Gates only catch what they check. <code>pricing.test.js</code> tests totals, and the health check only proves the process can reach the database. A is wrong because stage 1 runs <code>node --test</code> in a throwaway <code>node:22-alpine</code> container. B is wrong because the image was built once, with two tags. D is wrong because the error is a JavaScript TypeError (<code>members</code> is undefined), not an SQL error. This is why you still need detection, a fast rollback and flags.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> random() versus a hash</summary>
+    <div class="body"><pre class="term">// version 1
+if (Math.random() &lt; 0.10) showSplitBill();
+
+// version 2   (bucket = sha256("split_bill:" + userId), first 4 bytes, % 100)
+if (bucket("split_bill", userId) &lt; 10) showSplitBill();</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Version 2 turns the feature on for exactly 10% of users, never 10.05%.</li>
+        <li>With version 1, asha may see the button on one page load and not on the next.</li>
+        <li>With version 2, changing <code>10</code> to <code>50</code> keeps everyone who already had the button.</li>
+        <li>With version 1, about 10% of requests show the button, but not to a fixed group of users.</li>
+        <li>Version 2 is preferred mainly because hashing is faster than <code>Math.random()</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, D.</b> The slide's rule is <code>hash(user_id) % 100 &lt; 10</code>, not <code>random() &lt; 0.1</code>. The hash gives each user a fixed bucket, so the feature is sticky, and raising the line only adds buckets. Random flickers: "the button appears and disappears". A is wrong because buckets only come out about even. The demo gets 1,005 of 10,000 users, which is 10.05%. E is wrong because the reason is a stable answer per user, not speed.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Who is ON at 30%?</summary>
+    <div class="body"><pre class="term">$ node rollout.js explain asha ravi meena kabir zoya      # flags.json: rollout_percent = 30
+user    bucket (sha256("group_order:" + user) ... % 100)
+asha    67
+ravi    14
+meena    5
+kabir   36
+zoya    30</pre>
+      <p><code>isOn</code> returns <code>bucket(flag, user) &lt; rollout_percent</code>. Who has the feature?</p>
+      <ol type="A">
+        <li>meena only</li>
+        <li>meena and ravi</li>
+        <li>meena, ravi and zoya</li>
+        <li>meena, ravi, zoya and kabir</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> ON means bucket 0 to 29, which is 30 buckets, or 30%. meena (5) and ravi (14) are below 30. zoya's bucket is exactly 30, and <code>30 &lt; 30</code> is false, so C is the boundary trap. A is the answer at 10%, as in the demo. D counts kabir (36), who only comes in at 37% or more. (These buckets are the real values the demo prints.)</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Turning the dial down</summary>
+    <div class="body"><p>The same five users (buckets: asha 67, ravi 14, meena 5, kabir 36, zoya 30). At noon <code>group_order</code> went from 10% to 50%. After some complaints you lower it to 20%. Compared with 50%, what happens?</p>
+      <ol type="A">
+        <li>meena and ravi keep the feature, kabir and zoya lose it, and asha never had it.</li>
+        <li>Nobody loses it, because buckets never move.</li>
+        <li>A new random 20% of users is chosen, so a different group has it now.</li>
+        <li>Everyone loses it until a new release is deployed with the new number.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> "Buckets don't move, only the line does." At 50%, buckets 0 to 49 are ON (meena, ravi, zoya, kabir). At 20%, only 0 to 19 are ON (meena, ravi). B mixes this up with raising the line: going up never turns anyone off, but going down turns off exactly the buckets between the two lines. C is wrong because the hash is fixed, so the same people stay in, with no randomness. D is wrong because the percentage lives in <code>flags.json</code>, outside the code, so no deploy is needed.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Two flags, the same users</summary>
+    <div class="body"><p>A team's helper computes <code>bucket = sha256(userId) % 100</code>, with no flag name in the hash. They run <code>new_menu</code> at 10% and <code>group_order</code> at 10% for 10,000 users. What does the demo's <code>overlap</code> step show for this method?</p>
+      <ol type="A">
+        <li>About 99 users are in both, roughly 10% × 10%, as chance would give.</li>
+        <li>No user is in both, because each flag picks its own buckets.</li>
+        <li>About 2,000 users have at least one feature, so the two groups don't touch.</li>
+        <li>The same 978 users are in both. Every 10% experiment lands on the same people.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> Without the flag name, a user gets the same bucket for every flag. So buckets 0 to 9 are the same 978 people each time: "the same 1,000 people test every new feature". A is what the demo shows when the flag name is in the hash (<code>"group_order:" + user</code>): 1,005 and 1,016 users, 99 in both. B and C are wrong because the two flags compute the same number per user, so their groups are identical, not separate.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> A kill switch behind a 30-second cache</summary>
+    <div class="body"><p>Each of three app servers caches its flag values for 30 seconds. At 19:20:00 you switch <code>split_bill</code> off in the flags table. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Every request still reads the flags table, so the change lands at once.</li>
+        <li>No server can see the change before 19:20:30.</li>
+        <li>Some requests may still use the old value until about 19:20:30.</li>
+        <li>Raising the cache to 5 minutes cuts database reads further, but then the switch can take up to 5 minutes to land.</li>
+        <li>The demo's v2.5 runs <code>SELECT enabled FROM flags</code> on every group-order request, so <code>flag.sh off</code> landed on the next request, at the cost of a database query each time.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C, D, E.</b> Slide 20: reading on every request lands changes at once but hits the database every time. Caching for 30 seconds means one read per 30 seconds, but a change takes up to 30 seconds. "Choose the delay you can live with." A describes reading on every request, not a cache. B is wrong because each server's cache runs out at its own time. A server whose cache ran out at 19:20:05 sees the change then, so 19:20:30 is the latest, not the earliest.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Lessons from Knight Capital</summary>
+    <div class="body"><p>Which practices deal with the causes given on the Knight Capital slide? Choose all that apply.</p>
+      <ol type="A">
+        <li>Write more unit tests for the new code. They would have caught it.</li>
+        <li>Never give a new feature an old flag name.</li>
+        <li>Cache flag values for 5 minutes so a bad change lands slowly.</li>
+        <li>Before turning the flag on, check that every server runs the new code.</li>
+        <li>Use a hosted flag service, because services can't reuse names.</li>
+        <li>Delete retired code paths and their flags once you are done with them.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, D, F.</b> The slide: new code reused an old flag name, and one of eight servers didn't get the new code. On that server, the flag switched on code retired years earlier. A misses the point, because the failing server wasn't running the new code at all. C only slows everything down, including your kill switch. E: a service still lets you pick any name, and the problem was the old code still being there, which is flag debt.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Knight Capital in numbers</summary>
+    <div class="body"><p>Which line matches the slide?</p>
+      <ol type="A">
+        <li>About $44 million in 45 minutes. One of eight servers missed the new code.</li>
+        <li>About $440 million in 45 hours. A hacker reused a flag.</li>
+        <li>About $440 million in 45 minutes. The flag service went down.</li>
+        <li>About $440 million in 4.5 minutes. All eight servers ran retired code.</li>
+        <li>About $440 million in 45 minutes (09:30 to 10:15, 1 August 2012). New code reused an old flag name, and one of eight servers didn't get the new code.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>E.</b> Knight Capital, 1 August 2012: about $440 million lost in 45 minutes. The cause was a reused flag name plus one of eight servers that was not updated, so the flag switched on code retired years earlier. A is ten times too small. B has the wrong time, and there was no hacker. C names a cause the slide doesn't give. D is wrong because seven servers were fine, and only one ran the old code.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Fourteen flags, no owners</summary>
+    <div class="body"><p>The <code>flags</code> table has 14 rows. Nine have been at 100% for months, and nobody knows who owns six of them. Which actions follow the slide? Choose all that apply.</p>
+      <ol type="A">
+        <li>Give every flag an owner and a removal date (for example <code>remove by: 30 Nov</code>).</li>
+        <li>Keep the 100% flags forever as free kill switches. Flags cost nothing.</li>
+        <li>When a new feature needs a flag, reuse the name of a deleted one to keep the table short.</li>
+        <li>For each flag at 100%, delete the flag and the old code path.</li>
+        <li>Delete the flag rows but leave the old code paths in place, in case someone needs them years later.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D.</b> Slide 23: "Every flag gets an owner and a removal date. Once a rollout reaches 100%, delete the flag and the old code path." B ignores flag debt: old flags and dead branches make the code harder to reason about. C is exactly the Knight Capital mistake. E keeps the dangerous part, the retired code that a flag could switch back on.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> What kind of rollout is deploy.sh?</summary>
+    <div class="body"><p>In the demo, stage 6 (<code>switch_to</code>) rewrites the Caddyfile to <code>reverse_proxy &lt;new&gt;:3000</code>, runs <code>caddy reload</code>, waits 1 second, then runs <code>docker rm -f &lt;old&gt;</code>. Meanwhile <code>traffic.sh</code> sends every 5th request as a group order. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>It is a canary, because <code>traffic.sh</code> sends 1 request in 5 to the new feature.</li>
+        <li>It is a blue-green style switch: all traffic moves to the new container at once.</li>
+        <li>Unlike the slide's blue-green, the old version is not kept warm, so going back means starting the old image again (<code>rollback.sh</code>).</li>
+        <li>The health check before the switch plays the readiness role: a new container that never answers <code>/healthz</code> gets no traffic.</li>
+        <li>A canary would send, say, 5% of traffic to v2.5 and 95% to v2.4, and grow only if healthy.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, D, E.</b> The proxy always points at exactly one container, which is "switch all at once". The old container is removed after the switch, not kept warm. "In both [blue-green and canary], readiness checks decide which servers get traffic." Here a failed health check removes the new container before any traffic reaches it. A is wrong because <code>traffic.sh</code> is a load generator (fake customers). Every request, group or single, goes to the one live version.</p></details>
+    </div></details>
+
+<!-- ===================================================== -->
+  <h3 class="sub" id="theory-t6">Surviving load: the database under load (T6)</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Count the queries</summary>
+    <div class="body"><pre class="term">const orders = await db.query(
+  "SELECT * FROM orders WHERE user_id = $1 LIMIT 20", [userId]);
+for (const o of orders.rows) {
+  o.items = await db.query(
+    "SELECT * FROM order_items WHERE order_id = $1", [o.id]);
+}</pre>
+      <p>The user has 35 orders. How many queries does one page load send to the database?</p>
+      <ol type="A">
+        <li>2</li>
+        <li>20</li>
+        <li>21</li>
+        <li>36</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> This is the N+1 shape: 1 query for the list, then 1 more per row. <code>LIMIT 20</code> caps the list at 20 rows, so 1 + 20 = 21. A is what a fixed version (one list query plus one batched query) would send. B forgets the list query. D uses all 35 orders and ignores the <code>LIMIT</code>.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> 40 bookings, 25 ms away</summary>
+    <div class="body"><p>A page lists a user's 40 bookings, then fetches each booking's passengers in a loop, one query per booking. In production the database is 25 ms away (per round trip), and each query itself takes almost no time. About how long does the page spend on database trips?</p>
+      <ol type="A">
+        <li>About 25 ms</li>
+        <li>About 50 ms</li>
+        <li>About 40 s</li>
+        <li>About 1 s</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> 1 + 40 = 41 queries, and each one waits for the previous one, so 41 × 25 ms = 1,025 ms, about 1 second. (The slide's poll: 51 × 30 ms ≈ 1.5 s.) A counts one trip. B is what the fixed version (2 queries) would cost. C multiplies by 1 second instead of 25 ms.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Fast on the laptop</summary>
+    <div class="body"><p>A booking page runs 51 queries (the N+1 shape). You fix it to 2 queries: the bookings, then <code>SELECT * FROM passengers WHERE booking_id = ANY($1)</code> with all 50 ids. On your laptop a trip takes about 1 ms, and in production about 30 ms. Counting round trips only, how much time does the fix save per page <b>in production</b>?</p>
+      <ol type="A">
+        <li>About 49 ms</li>
+        <li>About 1,470 ms</li>
+        <li>About 1,530 ms</li>
+        <li>Nothing, because the database reads the same passenger rows either way.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> Before: 51 × 30 = 1,530 ms. After: 2 × 30 = 60 ms. The saving is 1,470 ms. A is the saving on the laptop ((51 − 2) × 1 ms), which is why nobody notices N+1 locally. C forgets that the fixed version still makes 2 trips. D misses the point: the cost of N+1 is the number of round trips times the latency, not the work per query.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which changes fix the N+1?</summary>
+    <div class="body"><p>The slide's code runs <code>SELECT * FROM bookings WHERE user_id = $1 LIMIT 50</code>, then <code>SELECT * FROM passengers WHERE booking_id = $1</code> once per booking in a <code>for</code> loop with <code>await</code>. The database is 30 ms away. Which changes remove the N+1? Choose all that apply.</p>
+      <ol type="A">
+        <li>Add an index on <code>passengers.booking_id</code>.</li>
+        <li>Fetch all passengers in one query with <code>WHERE booking_id = ANY($1)</code>, passing the 50 booking ids.</li>
+        <li>Raise the connection pool from 10 to 50.</li>
+        <li>Use one query that JOINs bookings and passengers.</li>
+        <li>Use the ORM's eager loading, which sends one <code>IN (…)</code> query for all the bookings' passengers.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, D, E.</b> Each of these brings the page down to 1 or 2 round trips. A makes each passenger query cheaper, but it is still 51 trips × 30 ms. C doesn't help either, because the loop <code>await</code>s each query before sending the next one, so the extra connections sit idle. More connections also add load to a limited database.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Pages, scans and B-trees</summary>
+    <div class="body"><p>Which statements match the slides? Choose all that apply.</p>
+      <ol type="A">
+        <li>A B-tree lookup takes one more step for every row added, so a table with a crore of rows needs about a crore of steps.</li>
+        <li>An index stores a second full copy of every column in the table.</li>
+        <li>Without an index, finding one PNR means reading every page of the table. That is a sequential scan.</li>
+        <li>An index is a sorted copy of some columns, with pointers back to the rows.</li>
+        <li>A B-tree is short and wide, so a lookup takes a handful of steps (3 in the slide's PNR example).</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C, D, E.</b> A table is stored as pages on disk, and with no index Postgres reads them all. An index is like the index at the back of a book. Because the B-tree is short and wide, it takes "a handful of steps, even among crores of rows". A describes a sequential scan, not a B-tree. B is wrong because an index copies only the indexed columns (plus pointers), not every column.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The phone directory rule</summary>
+    <div class="body"><p>RailBook has <code>CREATE INDEX ON journeys (from_station, journey_date);</code>. For which queries can Postgres use this index to go straight to the matching part of the index? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>WHERE from_station = 'PUNE'</code></li>
+        <li><code>WHERE journey_date = '2026-11-14'</code></li>
+        <li><code>WHERE train_no = '12124'</code></li>
+        <li><code>WHERE from_station = 'PUNE' AND journey_date = '2026-11-14'</code></li>
+        <li><code>WHERE from_station = 'PUNE' AND train_no = '12124'</code> (it finds the PUNE entries, then checks <code>train_no</code> on those rows)</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D, E.</b> The index is sorted by station first, then by date within each station, like a phone directory sorted by surname, then first name. Station alone is fast, and station plus date is fast (and is the one that uses the index fully, as in the slide's poll). E uses the station part, then filters. B is "date alone: no help". The dates are spread across every station, so there is no place to jump to. At best Postgres reads the whole index. C uses a column that isn't in the index at all.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which column goes first?</summary>
+    <div class="body"><p>Every query on <code>journeys</code> filters on <code>journey_date</code>. Some of them also filter on <code>from_station</code>. You want one composite index. Which one follows the slide's rule?</p>
+      <ol type="A">
+        <li><code>(journey_date, from_station)</code></li>
+        <li><code>(from_station, journey_date)</code></li>
+        <li><code>(from_station)</code> alone</li>
+        <li>A separate index on every column of <code>journeys</code></li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> "Put the column you always filter on first." With <code>journey_date</code> leading, date-only queries and date-plus-station queries can both use the index. B helps only queries that include the station, so the date-only queries get no help. C ignores the date. D pays the write cost of many indexes: every insert and update must update every index.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Seven indexes at 10:00</summary>
+    <div class="body"><p>The <code>bookings</code> table has 7 indexes. At 10:00, Tatkal brings thousands of inserts per minute. Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>More indexes make inserts faster, because Postgres finds where to put the row sooner.</li>
+        <li>Each new booking row also adds an entry to all 7 indexes.</li>
+        <li>The indexes take up disk space.</li>
+        <li>An index on <code>seat_no</code> slows down SELECTs that filter only on <code>train_id</code>.</li>
+        <li>The rule is to index the queries you run often, not every column.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, E.</b> Slide 14: "Every insert and update also updates every index", and indexes use disk space. So index only what your frequent queries need. A has it backwards, because each index is extra work on every write. D is wrong because an unused index doesn't slow down reads that don't use it. Its cost is on writes and disk.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Read the EXPLAIN</summary>
+    <div class="body"><pre class="term">EXPLAIN ANALYZE SELECT * FROM tickets WHERE pnr = 4521873390;     -- 100,000 rows
+ Seq Scan on tickets  (cost=0.00..1887.00 rows=1 width=18) (actual time=23.194..23.195 rows=0 loops=1)
+   Filter: (pnr = '4521873390'::bigint)
+   Rows Removed by Filter: 100000
+ Planning Time: 1.022 ms
+ Execution Time: 23.227 ms
+
+CREATE INDEX idx_pnr ON tickets (pnr);
+
+EXPLAIN ANALYZE SELECT * FROM tickets WHERE pnr = 4521873390;
+ Index Scan using idx_pnr on tickets  (cost=0.29..8.31 rows=1 width=18) (actual time=0.244..0.245 rows=0 loops=1)
+   Index Cond: (pnr = '4521873390'::bigint)
+ Planning Time: 1.210 ms
+ Execution Time: 0.336 ms</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Before the index, Postgres checked all 100,000 rows against the filter.</li>
+        <li>The new index will also make inserts into <code>tickets</code> faster.</li>
+        <li>After the index, the <code>Index Cond</code> line shows the condition was used to search the index.</li>
+        <li>Most of the gain is in planning time.</li>
+        <li>Execution time fell from about 23 ms to about 0.3 ms.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, C, E.</b> This is what the slide-15 demo asks you to watch for: <code>Seq Scan</code> becomes <code>Index Scan</code> with an <code>Index Cond</code>, and the execution time drops. "Rows Removed by Filter: 100000" means every row was read and thrown away. B is wrong because every insert now also updates <code>idx_pnr</code>. D is wrong because planning time actually rose a little (1.0 to 1.2 ms). Execution time is what fell. (This output came from a real Postgres 16 run.)</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Building an index at 09:58</summary>
+    <div class="body"><p><code>bookings</code> has 40 million rows. At 09:58 someone runs a plain <code>CREATE INDEX idx_b_user ON bookings (user_id);</code>, which takes 6 minutes to build. What do users see between 10:00 and 10:04?</p>
+      <ol type="A">
+        <li>Searches (SELECTs) on <code>bookings</code> fail, but new bookings go through.</li>
+        <li>New bookings (INSERTs) wait until the build finishes, while reads keep working.</li>
+        <li>Nothing. Postgres always builds indexes in the background.</li>
+        <li>The build is cancelled automatically when the first INSERT arrives.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> Slide 16: a plain <code>CREATE INDEX</code> blocks writes to the table while it builds, and at Tatkal time that means stuck bookings. A is the wrong way round, because writes are blocked, not reads. C describes <code>CREATE INDEX CONCURRENTLY</code>, which you have to ask for. It doesn't block writes, but it takes longer and can't run inside a transaction. D: Postgres doesn't cancel the build. The writes queue behind it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> A phone line to one operator</summary>
+    <div class="body"><p>Why does Postgres have a hard connection limit, <code>max_connections</code> (default 100)?</p>
+      <ol type="A">
+        <li>Each connection starts a separate Postgres server process with its own memory.</li>
+        <li>Each connection permanently takes one CPU core.</li>
+        <li>TCP only allows 100 ports per server.</li>
+        <li>The limit is per app server, so each app server gets its own 100.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> "A connection is a phone line to one operator." Each one is a process with its own memory, so the database has a fixed number of operators. B is wrong because an idle connection uses memory, not a CPU core. C is wrong because TCP has tens of thousands of ports. D is wrong because the limit belongs to the database server and is shared by every client, which is why connections multiply when you scale out.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Blue-green meets max_connections</summary>
+    <div class="body"><p>TiffinGo runs 8 app containers, each with a pool of <code>max: 10</code>. Postgres has <code>max_connections = 100</code>. A blue-green deploy (T5) starts 8 new containers beside the 8 old ones, health-checks them, then switches traffic. Dinner traffic is high, so the pools fill. What can happen during the overlap?</p>
+      <ol type="A">
+        <li>Nothing. The total stays at 80, because the old containers stop using the database when the new ones start.</li>
+        <li>Nothing. The total stays at 80, because the pools on different containers share their connections.</li>
+        <li>Up to 160 are needed. Postgres queues the extra 60 until the old containers are removed.</li>
+        <li>Up to 160 are needed. Connections past the limit are refused with <code>FATAL: sorry, too many clients already</code>, so health checks or requests can fail in the middle of the deploy.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> During a deploy, old and new run side by side (T5), and every container brings its own pool (T6): 16 × 10 = 160. A is wrong because the old containers keep serving until the switch. B is wrong because a pool belongs to one process and is not shared (only a pooler such as PgBouncer shares connections). C is wrong because Postgres refuses connection 101. It doesn't queue it. One fix is to size for the overlap: 16 × p ≤ 100 − 10 spare gives p = 5.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Count with me: serverless</summary>
+    <div class="body"><p>At 10:00, 200 serverless functions run at once, and each one opens its own pool of 5 connections. The limit is 100. How many connections are wanted?</p>
+      <ol type="A">
+        <li>205, just over the limit</li>
+        <li>200, twice the limit</li>
+        <li>1,000, ten times the limit</li>
+        <li>100, because the platform shares one pool among all functions</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> 200 × 5 = 1,000, which is the slide's "count with me" line. A adds instead of multiplying. B counts one connection per function. D is wrong because each function instance has its own pool. Sharing only happens if you put a pooler in front of the database.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Break it on purpose</summary>
+    <div class="body"><pre class="term"># max_connections has been set to 20
+docker compose exec db sh -c \
+  'for i in $(seq 30); do
+     psql -U postgres -c "select pg_sleep(5)" &gt;/dev/null &amp;
+   done; wait'</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>The failures happen because <code>pg_sleep(5)</code> runs longer than Postgres's default query timeout.</li>
+        <li>The <code>&amp;</code> makes each <code>psql</code> wait for the previous one to finish.</li>
+        <li>About 10 of the 30 print <code>psql: error: … FATAL:  sorry, too many clients already</code>.</li>
+        <li>The extra 10 wait in a queue inside Postgres and run once a slot frees up.</li>
+        <li>Without the <code>&amp;</code>, the 30 would run one after another, and none would fail.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C, E.</b> <code>&amp;</code> starts each <code>psql</code> in the background, so all 30 try to connect at once. Only 20 fit, so about 10 are refused. (I checked this on Postgres 16: exactly 10 failures.) Run one at a time, only one connection is ever open. A is wrong because Postgres has no default query timeout, and the error is about connecting, not about the query. B describes running without <code>&amp;</code>. D is wrong because connections past the limit are refused, not queued.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> The fixes for too many clients</summary>
+    <div class="body"><p>The autoscaler can take RailBook from 4 to 8 app servers at 10:00, and <code>max_connections</code> is 100. Which of these are fixes from the slides? Choose all that apply.</p>
+      <ol type="A">
+        <li>Raise <code>max_connections</code> to 5,000, because connections are cheap.</li>
+        <li>Size every pool on purpose: add them all up and stay under the limit (8 × 10 = 80 ≤ 100 − 10 spare).</li>
+        <li>Set a wait timeout, so a request waits for a free pooled connection instead of failing.</li>
+        <li>Remove the pool, so each request opens and closes its own connection.</li>
+        <li>Put a pooler (PgBouncer, Supavisor) in front of the database.</li>
+        <li>Leave room for the extra servers the autoscaler may add.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, E, F.</b> These are the four fixes on slide 22. A ignores that each connection is a process with its own memory, so connections are not cheap. D makes things worse. Every request then pays to open a connection, and a spike opens as many connections as there are requests, which hits the limit even sooner.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Moving to transaction mode</summary>
+    <div class="body"><p>A reporting service talks to Postgres through PgBouncer. On one client connection it does this:</p>
+<pre class="term">PREPARE seat_count (int) AS SELECT count(*) FROM bookings WHERE train_id = $1;   -- transaction 1
+EXECUTE seat_count(12124);                                                       -- transaction 2</pre>
+      <p>The team switches PgBouncer from session mode to transaction mode. What is the risk?</p>
+      <ol type="A">
+        <li>None. The pooler keeps the same database connection for a client until it disconnects.</li>
+        <li>Each transaction may run on a different database connection, so the prepared statement may not exist when <code>EXECUTE</code> runs.</li>
+        <li>The pooler now refuses more than 5 app connections.</li>
+        <li>Nothing new. Session mode had the same problem, and the two modes differ only in speed.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B.</b> In transaction mode a connection is "lent per transaction", so it "can't keep anything between transactions, such as prepared statements or session locks". A describes session mode ("kept per client"), which is the mode they just left. C confuses the slide's picture (12 app connections sharing 5 database connections) with a cap on clients. D is wrong because session mode keeps one connection per client, so the prepared statement would still be there.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> "We still have 10% left"</summary>
+    <div class="body"><p>At 09:55 the database is 90% busy, with requests arriving at random. A manager says: "We have 10% headroom. At 99% busy, waits will only be about 10% longer." What does the slide say?</p>
+      <ol type="A">
+        <li>The manager is right. Waiting time grows in step with how busy the server is.</li>
+        <li>Waiting depends only on how fast each query runs, not on how busy the server is.</li>
+        <li>At 99% the queue gets shorter, because the database is working at full speed.</li>
+        <li>The manager is wrong. At 50% busy the queue is short, at 90% it is long, and at 99% it explodes.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>D.</b> Slide 24: with one counter and random arrivals, waiting time stays nearly flat up to about 50%, rises at 90% and goes almost vertical near 99%. A assumes a straight line, but the curve is not linear. B ignores queueing: a request that waits behind others is slow even when each query is fast. C has it backwards. Keep headroom, because the last few percent cost the most.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Wasn't that a transaction?</summary>
+    <div class="body"><pre class="term">BEGIN;
+SELECT booked, capacity FROM trains WHERE id = 12124;    -- 99, 100
+-- app: 99 &lt; 100, so book
+UPDATE trains SET booked = booked + 1 WHERE id = 12124;
+INSERT INTO bookings (train_id, user_id) VALUES (12124, $1);
+COMMIT;</pre>
+      <p>10 requests arrive at once for the last seat, and more than one booking succeeds. Why?</p>
+      <ol type="A">
+        <li>The transaction wasn't committed.</li>
+        <li>Postgres doesn't support transactions under load.</li>
+        <li>The transactions all read the same count before any of them wrote.</li>
+        <li>There was no index on <code>trains.id</code>.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>C.</b> This is the slide-30 poll. Every request reads booked = 99, decides 99 &lt; 100, and books. A transaction is all or nothing, but "a transaction alone does not stop two requests reading the same count". (I ran this on Postgres 16 with 10 parallel clients: all 10 booked, and <code>booked</code> ended at 109.) A is wrong because each transaction did commit, which is how the extra bookings got saved. B is wrong because transactions work fine under load. D is wrong because an index changes speed, not correctness, and <code>id</code> is the primary key, which already has one.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Check-then-act</summary>
+    <div class="body"><p>Which statements about the last-seat bug are true? Choose all that apply.</p>
+      <ol type="A">
+        <li>Wrapping the check and the insert in <code>BEGIN … COMMIT</code> closes the gap.</li>
+        <li>Between the read (check) and the write (act), another request can change the state. This is the "danger window".</li>
+        <li>The unit tests passed because they send one request at a time.</li>
+        <li>A transaction gives all or nothing (like a UPI transfer, where the ₹1,450 debit and credit happen together). It does not make requests take turns.</li>
+        <li>The race needs two app servers. One Node process with a pool can't oversell.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, C, D.</b> Check-then-act breaks when two requests interleave, and "your tests pass because they send one request at a time". A is the trap from the poll: the demo's code was already inside BEGIN/COMMIT and still oversold. E is wrong because one Node process handles many requests at once. While one request <code>await</code>s its SELECT, another runs on a different pooled connection, so they can interleave just like two servers.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Predict: one statement, ten requests</summary>
+    <div class="body"><pre class="term">UPDATE trains
+   SET booked = booked + 1
+ WHERE id = 12124 AND booked &lt; capacity
+RETURNING booked;</pre>
+      <p>Train 12124 has booked = 99 and capacity = 100. Ten requests run this at the same moment. What happens?</p>
+      <ol type="A">
+        <li>One request gets 1 row back (booked = 100). Nine get 0 rows back, and the API answers them with HTTP 409.</li>
+        <li>All ten get a row back, and booked ends at 109.</li>
+        <li>Nine fail with a deadlock error and must retry.</li>
+        <li>One gets a row back. The other nine get HTTP 500, because 0 rows is a database error.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A.</b> Fix 1 puts the check inside the write. The first UPDATE locks the row. The others wait, then re-check <code>booked &lt; capacity</code> against the new value (100 &lt; 100 is false), so they update 0 rows. (I checked this on Postgres 16: exactly one row came back, and booked = 100.) B is the unfixed check-then-act result. C is wrong because they simply wait on one row, so nothing deadlocks. D is wrong because 0 rows is a normal answer meaning "the train is full", and the slide's response is 409, not 500.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> FOR UPDATE: who waits?</summary>
+    <div class="body"><pre class="term">BEGIN;
+SELECT capacity FROM trains WHERE id = $1 FOR UPDATE;
+SELECT count(*) FROM bookings WHERE train_id = $1;
+-- if count &lt; capacity: INSERT INTO bookings ...
+COMMIT;</pre>
+      <p>Which statements are true? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>FOR UPDATE</code> locks the whole <code>bookings</code> table until COMMIT.</li>
+        <li>Other requests for the same train wait at their <code>SELECT … FOR UPDATE</code> until this transaction commits.</li>
+        <li>Without <code>FOR UPDATE</code>, this code is still safe, because it runs inside BEGIN/COMMIT.</li>
+        <li>A booking for a different train (12951) doesn't wait for this lock.</li>
+        <li>Keep this transaction short: while it holds the row, every other booking for that train is waiting.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>B, D, E.</b> "FOR UPDATE makes everyone else wait for this train's row until you commit." It locks the selected row, not a table (A), so other trains go ahead. Because everyone queues on that row, hold it as briefly as you can. C is check-then-act again: without the lock, two transactions can both count 99 and both insert. (On Postgres 16 with 10 parallel clients, the FOR UPDATE version booked exactly 1.)</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Safety nets and other names</summary>
+    <div class="body"><p>Which statements match the slides? Choose all that apply.</p>
+      <ol type="A">
+        <li><code>CHECK (booked &lt;= capacity)</code> makes the database refuse booked = 101, even if the app code has a bug.</li>
+        <li>With constraints in place you can drop Fix 1 and Fix 2. The constraint error makes a fine message for users.</li>
+        <li>SERIALIZABLE isolation never produces errors. It only makes transactions wait.</li>
+        <li>Optimistic locking uses a <code>version</code> column. Your update fails if someone changed the row first.</li>
+        <li>A Redis distributed lock is the slide's fix for a seat count stored in one Postgres database.</li>
+        <li><code>UNIQUE (train_id, seat_no)</code> stops two bookings for seat 42 on the same train.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, D, F.</b> Constraints are a safety net: "if your code has a bug, the database still refuses the bad row". B is wrong because they are a backstop, not the main logic. A full train should get a clean 409 from Fix 1 or Fix 2, not a constraint error. C is wrong because Postgres aborts one of the conflicting transactions, and you retry it. E is wrong because distributed locks are for state outside one database.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Little's law: how many connections are busy? (outline)</summary>
+    <div class="body"><p>(Course outline, not on the slides.) The booking API gets 200 requests per second at a steady rate. Each request holds a database connection for 50 ms on average. On average, how many connections are in use at any moment?</p>
+      <ol type="A">
+        <li>4</li>
+        <li>50</li>
+        <li>200</li>
+        <li>250</li>
+        <li>10</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>E.</b> Little's law: L = λ × W, where L is the number in the system, λ the arrival rate and W the time each one spends. Here 200/s × 0.05 s = 10. A divides 200 by 50. B mixes up milliseconds with a count. C is the number of arrivals per second, not how many are in use at once. D adds the numbers instead of multiplying. Ten in use on average still means you need more connections than that for bursts, because of queueing near full use.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Median unchanged, p99 tripled (outline)</summary>
+    <div class="body"><p>(Course outline, not on the slides.) A k6 test sends a sudden burst, like Tatkal at 10:00. Compared with normal traffic, the median response time stays at 80 ms, but p99 goes from 300 ms to 900 ms. Which statements are reasonable? Choose all that apply.</p>
+      <ol type="A">
+        <li>A sudden jump like this is a spike test. A soak test instead holds steady load for hours to find leaks or slow decline.</li>
+        <li>Most requests are fine, but a few wait: for a free pooled connection, for a row lock (<code>FOR UPDATE</code>), or in a queue near full use.</li>
+        <li>The median didn't move, so nothing is wrong. p99 is just noise.</li>
+        <li>A few requests whose query can't use an index (a Seq Scan) could explain a slow tail.</li>
+        <li>A ramp test raises the load step by step to find where things break.</li>
+        <li>Because the median didn't change, the database must have more than 50% spare capacity, so queueing can't be the cause.</li>
+      </ol>
+      <details class="answer"><summary>Show answer</summary><p><b>A, B, D, E.</b> A stable median with a growing tail means a minority of requests is waiting for something. Pool waits, lock waits and queues near saturation all hit only some requests. C is wrong because 1 user in 100 now waits about a second, and at Tatkal scale that is thousands of people. F is wrong because queueing near 100% busy shows up first in the tail, while the typical request still looks fine.</p></details>
+    </div></details>
+
   <h3 class="sub" id="theory-earlier">Review of earlier lectures: runtime, config, secrets and AI workflow (T0/T1)</h3>
   <p>These lectures were in quiz 1A, not 2A. Their ideas still show up inside later questions (ports, lockfiles, secrets in history), so here is a short set.</p>
 
@@ -2263,5 +2926,21 @@ LOG     waiting for a free connection (pool max_size=5)</pre>
     <li>Restart policy = supervisor for one host, not an orchestrator. Recovers: crashed process, host reboot. Not: lost VM, crash on every start (loop, no alert), cert/disk/patches, nobody told. <code>docker stop</code> by hand stays stopped</li>
     <li>Ladder: systemd (one process) → Docker restart policy (one host) → Kubernetes/Swarm (many hosts, desired state) → managed platform. Four jobs: failure detection, scheduling, placement/startup, routing/service discovery. Desired − observed = actions</li>
     <li>Liveness (<code>/healthz</code>, no DB) fails → restart. Readiness fails → stop routing, no restart (LBs use it). Startup = wait while booting. Scale out needs a load balancer + stateless servers. Trace: 2,300 of 2,319 ms in DB, "waiting for a free connection" (pool max_size=5 per instance)</li>
+  </ul></div>
+  <div class="cheat"><h3>Safe delivery and the database under load (T5, T6)</h3><ul>
+    <li>Time to recover = <b>detect + decide + act</b>. TiffinGo: 7 + 2 + 1 min (19:02 → 19:09 → 19:11 → 19:12). "Most outages are long because <b>nobody noticed</b>"</li>
+    <li>Pipeline order: <b>Test → Build → Migrate → Deploy → Check health</b>. Old code still serves during the migration, so every migration must work with the <b>old</b> code</li>
+    <li>CI runner: a fresh computer, starts empty, deleted at the end. A non-zero exit code stops the job. Secrets come from the <b>repository's settings</b>, never from the code</li>
+    <li>Build the image <b>once</b>, tag it with the <b>commit id</b> (<code>tiffingo:3f9a2c1</code>), and run that same image in staging and production. Rebuilding can give a different image</li>
+    <li>Three ways back: flag off = <b>seconds</b> (nothing deployed), previous image = <b>~1 min</b> (nothing rebuilt), revert the commit = <b>minutes</b> (the pipeline runs again)</li>
+    <li>"Code is reversible. Data is not. Sent messages are forever." Redeploying 2.3 after the <code>items → order_items</code> rename: <b>checkout fails on 2.3 too</b>. Fix forward</li>
+    <li>Demo: <code>/healthz</code> only runs <code>SELECT 1</code>, so it says "ok" while checkout fails. <code>rollback.sh</code> never touches the database. A failed gate prints "Production is unchanged", but a migration that already ran stays</li>
+    <li>Percentage rollout: <code>hash(user_id) % 100 &lt; 10</code>, not <code>random() &lt; 0.1</code>. Demo: <code>sha256(flag + ":" + user)</code>, first 4 bytes, % 100. Raising the % never turns anyone off. Put the flag name in the hash, or every flag hits the same users (978 overlap vs 99)</li>
+    <li>Flags: kill switch, percentage, targeted (Pune first). Reading on every request lands changes at once. A 30 s cache means up to 30 s delay. Every flag needs an owner and a removal date. At 100%, delete the flag and the old code path</li>
+    <li>Knight Capital, 1 Aug 2012: a <b>reused flag name</b>, <b>1 of 8 servers</b> didn't get the new code, <b>~$440M in 45 min</b>. Blue-green = switch all at once (old kept warm). Canary = 5% first, then grow only if healthy. In both, <b>readiness checks</b> decide which servers get traffic</li>
+    <li>N+1 = 1 query for the list + 1 per row. 50 rows = <b>51 queries</b>. 51 × 30 ms ≈ <b>1.5 s</b> in production, about 51 ms on a laptop. Fix: a JOIN or <code>= ANY($1)</code>, so 1 or 2 trips</li>
+    <li>No index = <b>Seq Scan</b> (reads every page). B-tree = a handful of steps. EXPLAIN after the index: <b>Index Scan + Index Cond</b>. Index <code>(a, b)</code> helps a, or a + b, but <b>not b alone</b>. Every index slows every insert and update. Plain <code>CREATE INDEX</code> blocks writes. <code>CONCURRENTLY</code> doesn't, but can't run in a transaction</li>
+    <li>Each connection = one Postgres <b>process</b>. <code>max_connections</code> default <b>100</b>. Connection 101 gets <code>FATAL: sorry, too many clients already</code>. Rule: servers × pool ≤ limit − spare (8 × 10 = 80 ≤ 90). Serverless: 200 × 5 = 1,000. A pooler in transaction mode loses prepared statements and session locks. Busy 50% = short queue, 90% = long, 99% = explodes</li>
+    <li>Last seat: both read 99/100, and <b>BEGIN/COMMIT alone doesn't help</b>. Fixes: <code>UPDATE … WHERE booked &lt; capacity RETURNING</code> (0 rows → <b>409</b>), <code>SELECT … FOR UPDATE</code>, and <code>CHECK</code>/<code>UNIQUE</code> as a safety net. SERIALIZABLE aborts one transaction, and you retry. Optimistic locking uses a <code>version</code> column</li>
   </ul></div>
 </section>
