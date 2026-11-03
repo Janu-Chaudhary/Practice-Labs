@@ -29,7 +29,9 @@ if docker compose version >/dev/null 2>&1; then pass "$(docker compose version)"
 
 echo; echo "${B}2. Ports${N}"
 for p in $PORTS; do
-  if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
+  # Linux note: fall back to ss when lsof is not installed (otherwise a busy port reads as free)
+  if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1 \
+     || { ! command -v lsof >/dev/null && ss -ltnH "sport = :$p" 2>/dev/null | grep -q .; }; then
     fail "port $p is in use: $(lsof -nP -iTCP:"$p" -sTCP:LISTEN | awk 'NR==2{print $1" (pid "$2")"}'). Run ./reset-all.sh, or stop that program."
   else
     pass "port $p is free"

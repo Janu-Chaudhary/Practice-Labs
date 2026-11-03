@@ -1,0 +1,208 @@
+<section class="topic" id="hosting" data-title="Hosting &amp; architecture">
+  <header class="topic-head">
+    <span class="tag">Topic 7</span>
+    <h2>Hosting, restart policies, health checks and module boundaries</h2>
+    <p class="lede">Run a service the way the T4L2 demo does, pick the right restart policy, write health checks that don't cause restart storms, make an app safe to scale out, and fix a module-boundary violation (T4L1).</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>Three questions: <b>where does it run</b> (VM, container PaaS, managed containers, serverless), <b>who keeps it running</b>, and <b>why that choice</b>.
+    "Who keeps it running" is a ladder: <b>systemd</b> = one process. <b>Docker restart policy</b> = one host. <b>Orchestrator</b> (Kubernetes, Swarm) = many hosts, desired state. <b>Managed platform</b> = the provider runs the control plane.
+    A restart policy brings a crashed process back. It can't move the app if the VM dies.
+    Config and secrets live in the environment (<code>--env-file</code>), never in the image. Liveness (<code>/healthz</code>) must not touch the DB; readiness (<code>/readyz</code>) does.
+    To scale <b>out</b>, app servers must be stateless: state goes to a shared store (Postgres), not process memory.
+    Inside one deployable (modular monolith), modules talk only through public APIs, and a CI check enforces it.</p>
+  </div>
+
+  <!-- ===================== DEMO A RUN ===================== -->
+  <h3 class="sub" id="hosting-run">docker run like the demo: restart, loopback port, env file</h3>
+  <p>This is the one command the demo uses to put hello-api on the VM (Step 3 + Step 5). Every flag answers a hosting question: background, fixed name, who restarts it, who can reach it, where its config comes from.</p>
+  <div class="anatomy">
+    <code><span>docker run -d</span> <span>--name hello-api</span> <span>--restart unless-stopped</span> <span>-p 127.0.0.1:8000:8000</span> <span>--env-file /etc/hello-api.env</span> <span>ghcr.io/acme/hello-api:1.0</span></code>
+    <ol>
+      <li>start a container in the background (detached), give the terminal back</li>
+      <li>a fixed name, used by <code>docker logs/rm/inspect hello-api</code></li>
+      <li>restart after a crash and after a Docker/host restart, but not after <i>you</i> stopped it</li>
+      <li><code>HOST_IP:HOST_PORT:CONTAINER_PORT</code>. <code>127.0.0.1</code> = only this machine can connect. The reverse proxy (Caddy) on 80/443 is the public door.</li>
+      <li>read every <code>KEY=value</code> line of a host file into the container's environment (secrets stay out of the image)</li>
+      <li>the image (<code>registry/owner/repo:tag</code>). Always <b>after</b> all options.</li>
+    </ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker port NAME</code></td><td>shows the published ports: <code>3000/tcp -&gt; 127.0.0.1:8301</code> (loopback) or <code>0.0.0.0:8301</code> (every interface = public)</td></tr>
+      <tr><td><code>docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' NAME</code></td><td>the restart policy (<code>no</code>, <code>on-failure</code>, <code>always</code>, <code>unless-stopped</code>)</td></tr>
+      <tr><td><code>docker inspect -f '{{json .Config.Env}}' NAME</code></td><td>the container's environment variables</td></tr>
+      <tr><td><code>docker image inspect IMAGE | grep DATABASE_URL</code></td><td>proves a secret is (not) baked into the image</td></tr>
+      <tr><td><code>docker rm -f NAME</code> then <code>docker run ...</code></td><td>the only way to change ports, env or volumes: <b>recreate</b></td></tr>
+      <tr><td><code>docker logs --tail 2 NAME</code></td><td>last 2 log lines (the demo's Step 6)</td></tr>
+      <tr><td><code>docker tag hello-api:1.0 ghcr.io/acme/hello-api:1.0</code></td><td>add a registry name to an image; then <code>docker push</code> uploads it</td></tr>
+    </tbody></table>
+  <pre class="term"><span class="p">$</span> docker run -d --name lab71-hello --restart unless-stopped -p 127.0.0.1:8301:3000 --env-file app.env lab71-hello:1.0
+<span class="p">$</span> docker ps
+... Up 3 seconds   127.0.0.1:8301-&gt;3000/tcp   lab71-hello
+<span class="c"># with -p 8301:3000 instead you would see 0.0.0.0:8301-&gt;3000/tcp, [::]:8301-&gt;3000/tcp (public)</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>docker restart</code> does not pick up a changed env file. Environment is fixed when the container is <b>created</b>. The demo does <code>docker rm -f hello-api</code> and runs it again: same image, new configuration.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p><code>--env-file</code> keeps quotes. <code>DB_PASSWORD="x"</code> gives the value <code>"x"</code> with the quotes. Write plain <code>KEY=value</code> lines, no spaces around <code>=</code>.</p></div>
+  <div class="err"><pre>docker: Error response from daemon: Conflict. The container name "/lab71-hello" is already in use</pre><p><b>Means:</b> an earlier attempt (maybe <code>Exited</code>) still holds the name.</p><p><b>Fix:</b> <code>docker rm -f lab71-hello</code>, then run again.</p></div>
+
+  <!-- ===================== RESTART POLICIES ===================== -->
+  <h3 class="sub" id="hosting-restart">Restart policies: a supervisor for one host</h3>
+  <table class="cmd"><thead><tr><th>Policy</th><th>Restarts when...</th><th>Use for</th></tr></thead>
+    <tbody>
+      <tr><td><code>no</code> (default)</td><td>never</td><td>one-off commands, <code>--rm</code> tools</td></tr>
+      <tr><td><code>on-failure</code> / <code>on-failure:5</code></td><td>the process exits with a code that is <b>not 0</b> (max 5 tries)</td><td>jobs: migrations, batch work. Retry on failure, stay finished after success.</td></tr>
+      <tr><td><code>always</code></td><td>any exit. A container you stopped by hand comes back when the Docker daemon restarts.</td><td>rarely what you want</td></tr>
+      <tr><td><code>unless-stopped</code></td><td>any exit and after a daemon/host restart, <b>unless you stopped it</b></td><td>long-running services (the demo)</td></tr>
+    </tbody></table>
+  <div class="anatomy">
+    <code><span>docker update</span> <span>--restart unless-stopped</span> <span>lab72-api</span></code>
+    <ol><li>change settings of an <b>existing</b> container (no recreate)</li><li>the new policy (also works for CPU/memory limits; NOT for ports, env, volumes)</li><li>the container</li></ol>
+  </div>
+  <pre class="term"><span class="p">$</span> docker exec lab72-api pkill -9 node      <span class="c"># fake a crash, like the demo's sudo pkill -9</span>
+<span class="p">$</span> docker ps --filter name=lab72-api
+... Up 2 seconds ...                        <span class="c"># Docker brought it back</span>
+<span class="p">$</span> docker inspect -f '{{.RestartCount}}' lab72-api
+1
+<span class="p">$</span> docker stop lab72-legacy                  <span class="c"># --restart always, but...</span>
+<span class="p">$</span> docker ps -a --filter name=lab72-legacy
+... Exited (143) ...                        <span class="c"># ...stays stopped: docker stop is never undone</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>docker stop</code> and <code>docker kill</code> both count as "stopped by hand". Docker will not restart after them, whatever the policy. A crash is the process dying <b>on its own</b>. <code>docker restart</code> also doesn't raise RestartCount.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p><code>always</code>/<code>unless-stopped</code> on a job that exits 0 makes it run again and again. A crash on every start gives a restart loop and <b>no alert</b>. Nobody is told.</p></div>
+  <div class="callout why"><strong>Why it's not an orchestrator</strong><p>One VM + <code>unless-stopped</code> covers: process crash ✓, host reboot ✓. It does not cover: VM lost ✗, crash loop ✗, full disk / expired cert ✗. Surviving the loss of a machine needs several hosts + something that reschedules. The four jobs of orchestration: <b>failure detection</b>, <b>scheduling</b> (find capacity), <b>placement/startup</b>, <b>routing/service discovery</b>. It runs a <b>reconciliation loop</b>: desired state − observed state = actions (desired 5, observed 2 → start 3 + update the load balancer).</p></div>
+  <p>Exit codes you'll see: <code>0</code> success, <code>1</code> app error, <code>137</code> = 128+9 (SIGKILL), <code>143</code> = 128+15 (SIGTERM, a normal <code>docker stop</code>).</p>
+
+  <!-- ===================== HEALTH ===================== -->
+  <h3 class="sub" id="hosting-health">Health checks: liveness vs readiness</h3>
+  <table class="cmd"><thead><tr><th>Check</th><th>Question</th><th>Who acts on a failure</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><code>/healthz</code> liveness</td><td>is the process alive? (no DB!)</td><td>orchestrator</td><td>restart it</td></tr>
+      <tr><td><code>/readyz</code> readiness</td><td>can it serve traffic now? (checks DB)</td><td>load balancer</td><td>stop routing, <b>no restart</b></td></tr>
+      <tr><td>startup</td><td>has a slow boot finished?</td><td>orchestrator</td><td>hold liveness until then</td></tr>
+    </tbody></table>
+  <div class="anatomy">
+    <code><span>HEALTHCHECK</span> <span>--interval=5s --timeout=3s --retries=3</span> <span>CMD wget -qO- http://127.0.0.1:3000/healthz</span> <span>|| exit 1</span></code>
+    <ol>
+      <li>Dockerfile instruction: Docker runs a command inside the container on a timer</li>
+      <li>every 5 s, each try may take 3 s, 3 failures in a row = <code>unhealthy</code></li>
+      <li>the probe. Use a tool the image <b>has</b>: Alpine images have <code>wget</code>, usually not <code>curl</code>. Use <code>127.0.0.1</code>: <code>localhost</code> can resolve to IPv6 <code>::1</code></li>
+      <li>turn any failure into exit code 1 (0 = healthy)</li>
+    </ol>
+  </div>
+  <pre class="term"><span class="p">$</span> docker ps --filter name=lab73-api
+... Up 8 seconds (healthy) ...
+<span class="p">$</span> docker stop lab73-db                       <span class="c"># DB outage</span>
+<span class="p">$</span> docker inspect -f '{{.State.Health.Status}}' lab73-api
+healthy                                     <span class="c"># liveness doesn't depend on the DB: correct</span>
+<span class="p">$</span> docker exec lab73-api wget -S -qO- http://127.0.0.1:3000/readyz
+  HTTP/1.1 503 Service Unavailable          <span class="c"># readiness fails: LB stops routing</span>
+<span class="p">$</span> docker inspect -f '{{json .State.Health}}' lab73-api   <span class="c"># last results + output of each probe</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p>If <code>/healthz</code> checks the DB, a 2-minute DB outage makes every replica "dead", and the orchestrator restarts all of them: a restart storm that can't fix the database. And plain Docker only <b>marks</b> a container <code>unhealthy</code>; it does not restart it.</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>"/healthz OK" only proves the process is up. <code>/hello</code> (the DB path) can still fail. Two checks catch two different failures.</p></div>
+
+  <!-- ===================== SCALE ===================== -->
+  <h3 class="sub" id="hosting-scale">Scaling out: stateless replicas behind a load balancer</h3>
+  <p><b>Vertical</b> = a bigger machine: simple, but has a ceiling, needs a restart, and is still one point of failure. <b>Horizontal</b> = more replicas behind a load balancer: survives losing one, but every replica must be able to answer every request. So state (sessions, counters, uploads) must live <b>outside</b> the process: Postgres, Redis, or (in the lab) a shared named volume.</p>
+  <pre class="term"><span class="p">$</span> curl -s 127.0.0.1:8350/ ; curl -s 127.0.0.1:8350/
+visits=1 served-by=3a60136cd6a9
+visits=1 served-by=a71545db4393            <span class="c"># each replica counts in its own memory</span>
+<span class="p">$</span> docker run -d --name lab75-web-1 --network lab75-net -v lab75-data:/data lab75-web:1.1
+<span class="p">$</span> docker run -d --name lab75-web-2 --network lab75-net -v lab75-data:/data lab75-web:1.1
+<span class="p">$</span> docker restart lab75-lb                  <span class="c"># nginx resolves upstream names only at start</span>
+<span class="p">$</span> curl -s 127.0.0.1:8350/ ; curl -s 127.0.0.1:8350/
+visits=3 served-by=2e9a8ec8046b
+visits=4 served-by=5efcd377a970            <span class="c"># shared state: consistent</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p>Replicas can't all publish the same host port (<code>port is already allocated</code>). Only the load balancer is published. Same reason <code>docker compose up --scale api=3</code> fails when the service has a fixed <code>ports:</code> or <code>container_name</code>.</p></div>
+  <div class="callout why"><strong>Why more instances don't always help</strong><p>Each instance has its own DB pool (<code>max_size=5</code>), so N instances can open 5×N connections against one Postgres limit. If the trace says the time is spent waiting for a pool connection, the bottleneck is the DB pool, not the API CPU. Serverless is the extreme case: one connection per invocation against a hard server limit.</p></div>
+
+  <!-- ===================== MODULES ===================== -->
+  <h3 class="sub" id="hosting-modules">T4L1: modular monolith and enforced boundaries</h3>
+  <p>A <b>modular monolith</b> is one deployable and one process, split into modules that own their rules and their private data and offer a public contract (functions like <code>get_email()</code>, or events like <code>OrderPlaced</code>). It has no network tax and ACID is easy. The boundary only holds if a tool enforces it in CI (Shopify's Packwerk). A comment or a team agreement doesn't count.</p>
+  <pre class="term"><span class="p">$</span> pytest -q
+FF.
+E   Dependency violation: billing -&gt; users (not in users' public API shop.users.api):
+E     shop/billing/invoice.py:1 imports shop.users._store
+<span class="c"># fix: billing calls users.get_email(user_id) instead of reading USERS_TABLE</span>
+<span class="p">$</span> pytest -q
+3 passed
+<span class="p">$</span> git add shop/billing/invoice.py
+<span class="p">$</span> git commit -m "billing: use users public API"</pre>
+  <div class="callout trap"><strong>Trap</strong><p>"It's one process, so a direct query into the other module's table is fine because it's faster" is <b>wrong</b> (Quiz 2A Q13). So are "silence/skip the check" and "move it to a microservice". Split into services only on <b>measured</b> pain (Fowler: more than 50 engineers, or very different hardware scaling).</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>Retries over a network need an <b>idempotency key</b> (a unique transaction reference). A timeout doesn't tell you the remote call failed: it may have run and only the reply was lost (partial failure).</p></div>
+
+  <!-- ===================== SCENARIOS ===================== -->
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Deploy hello-api like the demo</summary>
+    <div class="body"><p>Your folder has a Dockerfile (app on port 8000) and <code>hello.env</code> with <code>LOG_LEVEL</code> and <code>DATABASE_URL</code>. Build <code>hello-api:1.0</code>. Run it in the background as <code>hello-api</code>, restarted after crashes and reboots but not after a manual stop, reachable only from this machine on port 8000, config from the file.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker build -t hello-api:1.0 .
+<span class="p">$</span> docker run -d --name hello-api --restart unless-stopped -p 127.0.0.1:8000:8000 --env-file hello.env hello-api:1.0
+<span class="p">$</span> docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' hello-api
+unless-stopped
+<span class="p">$</span> docker port hello-api
+8000/tcp -&gt; 127.0.0.1:8000</pre><p>"Not after a manual stop" = <code>unless-stopped</code>, not <code>always</code>. "Only this machine" = the <code>127.0.0.1:</code> prefix. All flags before the image.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Wrong policy, can't recreate</summary>
+    <div class="body"><p>Container <code>orders</code> runs with no restart policy. You must give it <code>unless-stopped</code> without losing it (don't remove it). Then prove a crash is recovered.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker update --restart unless-stopped orders
+<span class="p">$</span> docker exec orders pkill -9 node      <span class="c"># or whatever the app process is</span>
+<span class="p">$</span> docker inspect -f '{{.State.Status}} {{.RestartCount}}' orders
+running 1</pre><p><code>docker update</code> changes the policy in place. Don't use <code>docker kill</code>/<code>stop</code> to test it: those are manual stops and are not restarted. (Note: if the app is PID 1 in the container, a kill from inside is ignored. The lab starts it with <code>--init</code> so it isn't.)</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which policy for the migration job?</summary>
+    <div class="body"><p><code>migrate</code> exits 1 while the DB isn't ready and 0 once it applied the migrations. It must be retried after a failure and never run again after a success. Which <code>--restart</code>? What happens with <code>unless-stopped</code>?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term"><span class="p">$</span> docker run -d --name migrate --restart on-failure -v state:/state jobs:1.0
+<span class="p">$</span> docker ps -a --filter name=migrate
+... Exited (0) ...</pre><p><code>on-failure</code> restarts only on a non-zero exit. With <code>unless-stopped</code> (or <code>always</code>) Docker restarts it after the success too, forever (<code>Restarting (0)</code>).</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Healthy during a DB outage?</summary>
+    <div class="body"><p>The Dockerfile has <code>HEALTHCHECK CMD curl -f http://localhost:3000/healthz || exit 1</code> on <code>node:24-alpine</code>, and <code>/healthz</code> runs <code>SELECT 1</code>. The container is always <code>unhealthy</code>, even with the DB up. Then, after a fix, it goes unhealthy every time the DB blips. Find the three problems.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">HEALTHCHECK --interval=5s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1</pre><p>(1) Alpine has no <code>curl</code>: use <code>wget</code> (read the reason in <code>docker inspect -f '{{json .State.Health}}'</code>). (2) <code>localhost</code> may resolve to <code>::1</code> while the app listens on IPv4: use <code>127.0.0.1</code>. (3) Liveness must not touch the DB: move <code>SELECT 1</code> to <code>/readyz</code>, rebuild, recreate.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Logged out at random</summary>
+    <div class="body"><p>After scaling to 3 replicas behind a load balancer, users get logged out at random. Sessions are kept in a JavaScript <code>Map</code> in the server. What's wrong, and which fixes are real?</p>
+      <details class="answer"><summary>Show answer</summary><p>Each replica only knows the sessions it created; the LB sends the next request elsewhere. Real fix: store sessions in a shared store (Postgres/Redis) or use stateless signed tokens, so any replica can answer. Sticky sessions only hide it: the sessions still die with a replica. Scaling vertically instead removes the symptom but keeps a single point of failure and a ceiling.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Boundary check fails in CI</summary>
+    <div class="body"><p>CI prints <code>Dependency violation: billing → user: User.find(id).email — not in user's public API</code>. Which actions are right? (a) call the user module's public function for the email; (b) add an ignore rule for this file; (c) move billing to a microservice; (d) keep the CI check.</p>
+      <details class="answer"><summary>Show answer</summary><p>(a) and (d). (b) silences the check. (c) adds the network tax without measured pain. In the lab: edit only <code>billing/invoice.py</code>, run <code>pytest</code>, then <code>git add</code> + one <code>git commit</code>.</p></details>
+    </div></details>
+
+  <!-- ===================== LABS ===================== -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="hosting-01"> <code>labs/07-hosting/01-run-like-demo-a</code>
+      <span>Build, write app.env, run with --restart unless-stopped, -p 127.0.0.1:8301:3000, --env-file</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="hosting-02"> <code>labs/07-hosting/02-restart-policies</code>
+      <span>docker update --restart, a pkill crash undone, on-failure for a job, docker stop not undone</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="hosting-03"> <code>labs/07-hosting/03-quiz-healthz-db-down</code>
+      <span>/healthz without the DB, /readyz with it, Dockerfile HEALTHCHECK, healthy while Postgres is stopped</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="hosting-04"> <code>labs/07-hosting/04-quiz-module-boundary</code>
+      <span>T4L1: billing reads users' private table; use the public API, make the pytest boundary check pass, commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="hosting-05"> <code>labs/07-hosting/05-twist-stateless-replicas</code>
+      <span>Two replicas behind nginx disagree; move the counter to a shared named volume, redeploy, restart the LB</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <!-- ===================== CHEAT SHEET ===================== -->
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>docker run -d --name app --restart unless-stopped -p 127.0.0.1:8000:8000 --env-file app.env img:1.0</code> the demo's run</li>
+    <li><code>-p 127.0.0.1:H:C</code> loopback only; <code>-p H:C</code> = 0.0.0.0 = public. Host port first.</li>
+    <li><code>--env-file f</code> all <code>KEY=value</code> lines; <code>-e KEY=value</code> one variable. Options go before the image.</li>
+    <li><code>docker rm -f app</code> + <code>docker run ...</code> to change env/ports/volumes (restart ≠ recreate)</li>
+    <li><code>docker update --restart unless-stopped app</code> change the policy in place</li>
+    <li><code>no</code> · <code>on-failure[:N]</code> (non-zero exit only: jobs) · <code>always</code> · <code>unless-stopped</code> (services)</li>
+    <li><code>docker stop</code>/<code>docker kill</code> = manual: never restarted. Restart policy = one host, not an orchestrator.</li>
+    <li><code>docker inspect -f '{{.HostConfig.RestartPolicy.Name}} {{.RestartCount}}' app</code></li>
+    <li><code>docker inspect -f '{{json .Config.Env}}' app</code> env of the container; <code>docker image inspect img | grep SECRET</code> must be empty</li>
+    <li><code>HEALTHCHECK --interval=5s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1</code></li>
+    <li><code>docker inspect -f '{{.State.Health.Status}}' app</code> starting / healthy / unhealthy (Docker only marks, doesn't restart)</li>
+    <li>liveness <code>/healthz</code>: no DB, fail = restart. readiness <code>/readyz</code>: checks DB, fail = LB stops routing.</li>
+    <li><code>docker exec app wget -S -qO- http://127.0.0.1:3000/readyz</code> test from inside when there's no curl</li>
+    <li>Scale out = stateless replicas + LB + shared state (<code>-v same-volume:/data</code> or Postgres). Only the LB publishes a port.</li>
+    <li>Orchestration jobs: failure detection, scheduling, placement/startup, routing/service discovery. Reconcile: desired − observed = actions.</li>
+    <li>Modular monolith: one deployable; modules call public APIs only; enforce in CI (Packwerk / a test); never silence the check.</li>
+    <li>Exit codes: 0 ok, 1 app error, 137 SIGKILL, 143 SIGTERM.</li>
+  </ul></div>
+</section>

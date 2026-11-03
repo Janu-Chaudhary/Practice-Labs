@@ -1,0 +1,220 @@
+<section class="topic" id="load" data-title="Database under load">
+  <header class="topic-head">
+    <span class="tag">Topic 9</span>
+    <h2>Surviving: the database under load (RailBook Tatkal)</h2>
+    <p class="lede">Count and remove N+1 queries, pick the right composite index and prove it with EXPLAIN, size connection pools with the formula, and fix the last-seat race with one conditional UPDATE, all checked with pytest.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>At 10:00 Tatkal opens and thousands of requests hit one database. Four things break, in this order of "where the time goes":
+    <b>round trips</b> (too many queries: N+1), <b>finding rows</b> (no usable index: full SCAN),
+    <b>connections</b> (each pool holds real Postgres processes; they multiply with servers; #101 is refused),
+    and <b>the last seat</b> (check-then-act: two requests read 99 before either writes).
+    Each has a measurable symptom (query count, plan line, connection total, booked &gt; capacity) and that symptom is what a test asserts.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="load-nplus1">N+1: count the round trips</h3>
+  <p>One query for a list, then one more query <b>per row</b>. N rows = N+1 queries. Each query may be fast; the cost is <b>round trips x latency</b>.
+  Laptop: DB 1 ms away, 51 x 1 ms = 51 ms (nobody notices). Production: DB 30 ms away, 51 x 30 ms = 1,530 ms ≈ 1.5 s.</p>
+  <pre class="term"><span class="c"># the warning sign: a query INSIDE a loop</span>
+rows = conn.execute("SELECT id, pnr, train_id FROM bookings WHERE user_id = ?", (uid,)).fetchall()   <span class="c"># 1</span>
+for booking_id, pnr, train_id in rows:
+    train = conn.execute("SELECT train_no FROM trains WHERE id = ?", (train_id,)).fetchone()     <span class="c"># + N</span>
+
+<span class="c"># the fix: ONE trip with a JOIN</span>
+conn.execute("SELECT b.pnr, t.train_no FROM bookings b JOIN trains t ON t.id = b.train_id "
+             "WHERE b.user_id = ? ORDER BY b.id", (uid,))</pre>
+  <table class="cmd"><thead><tr><th>Fix</th><th>Queries</th><th>Notes</th></tr></thead><tbody>
+    <tr><td><code>JOIN</code></td><td>1</td><td>parent + child columns in one row; keep the same <code>ORDER BY</code></td></tr>
+    <tr><td><code>WHERE id IN (?, ?, ...)</code> / Postgres <code>= ANY($1)</code></td><td>2</td><td>get the list, then all children at once</td></tr>
+    <tr><td>ORM eager loading</td><td>1-2</td><td>the ORM does one of the two above</td></tr>
+    <tr><td>index on the child column</td><td>still N+1</td><td>each trip faster, still 51 trips: <b>not a fix</b></td></tr>
+    <tr><td>bigger pool / faster CPU</td><td>still N+1</td><td>not a fix</td></tr>
+  </tbody></table>
+  <p><b>Counting queries in a test</b> (sqlite3): <code>conn.set_trace_callback(f)</code> makes sqlite call <code>f(sql)</code> once per statement it runs.</p>
+  <pre class="term">def test_at_most_two_queries():
+    conn = make_db()
+    queries = []
+    conn.set_trace_callback(queries.append)    <span class="c"># record every statement</span>
+    list_bookings_with_trains(conn, 7)
+    conn.set_trace_callback(None)              <span class="c"># stop recording</span>
+    assert len(queries) &lt;= 2
+
+<span class="p">$</span> pytest -s -k two_queries      <span class="c"># -s shows print() output, -k picks the test by name</span>
+E   assert 6 &lt;= 2</pre>
+  <div class="callout trap"><strong>Trap</strong><p>With a JOIN, <code>SELECT *</code> returns columns of <b>both</b> tables, so <code>row[1]</code> is not what it was. Name the columns. And an inner <code>JOIN</code> drops parents with no children: use <code>LEFT JOIN</code> + <code>count(b.id)</code> (not <code>count(*)</code>, which counts the NULL row as 1).</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="load-index">Indexes, the leading column, and reading the plan</h3>
+  <p>No index: the database reads every row (<b>Seq Scan</b> in Postgres, <b>SCAN</b> in sqlite). An index is a sorted copy of some columns with pointers to the rows (a B-tree): a handful of steps even among crores of rows.
+  A <b>composite</b> index is sorted by the first column, then by the second inside each first value: the <b>phone-book rule</b>.</p>
+  <div class="anatomy">
+    <code><span>CREATE INDEX</span> <span>idx_trains_station_date</span> <span>ON trains</span> <span>(from_station, journey_date)</span>;</code>
+    <ol><li>make a B-tree index (plain = blocks writes while building)</li><li>its name (you will see it in the plan)</li><li>which table</li><li>column order matters: leading column first = the one you ALWAYS filter on</li></ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Query on <code>(from_station, journey_date)</code></th><th>Uses the index?</th></tr></thead><tbody>
+    <tr><td><code>WHERE from_station = 'PUNE'</code></td><td>yes (leading column)</td></tr>
+    <tr><td><code>WHERE from_station = 'PUNE' AND journey_date = '2026-11-14'</code></td><td>yes (order in the WHERE does not matter)</td></tr>
+    <tr><td><code>WHERE journey_date = '2026-11-14'</code></td><td><b>no</b> (second column alone)</td></tr>
+    <tr><td><code>WHERE train_no = '12124'</code></td><td><b>no</b> (not in the index)</td></tr>
+  </tbody></table>
+  <p><b>Read the plan.</b> sqlite: <code>EXPLAIN QUERY PLAN &lt;query&gt;</code> (from Python: <code>conn.execute("EXPLAIN QUERY PLAN " + sql, params)</code>, column 3 is the text). Postgres: <code>EXPLAIN</code> / <code>EXPLAIN ANALYZE</code> (really runs it, shows times).</p>
+  <pre class="term"><span class="c"># before (no index)</span>
+search station+date: SCAN trains
+search station only: SCAN trains
+<span class="c"># index (journey_date, from_station): the WRONG order</span>
+search station+date: SEARCH trains USING INDEX w (journey_date=? AND from_station=?)
+search station only: SCAN trains                       <span class="c"># &lt;- leading column is not filtered</span>
+<span class="c"># index (from_station, journey_date): right</span>
+search station+date: SEARCH trains USING INDEX idx_trains_station_date (from_station=? AND journey_date=?)
+search station only: SEARCH trains USING INDEX idx_trains_station_date (from_station=?)</pre>
+  <table class="cmd"><thead><tr><th>Plan text</th><th>Means</th></tr></thead><tbody>
+    <tr><td><code>SCAN trains</code> / Postgres <code>Seq Scan on trains</code></td><td>reads the whole table</td></tr>
+    <tr><td><code>SEARCH trains USING INDEX idx (col=?)</code> / <code>Index Scan using idx</code> + <code>Index Cond: (...)</code></td><td>jumps via the index</td></tr>
+    <tr><td><code>USING COVERING INDEX</code> / <code>Index Only Scan</code></td><td>the index alone has every needed column: even better</td></tr>
+    <tr><td><code>SCAN trains USING COVERING INDEX idx</code></td><td>still reads the whole index, in order: not a real lookup</td></tr>
+    <tr><td><code>SEARCH b USING AUTOMATIC COVERING INDEX</code></td><td>sqlite builds a throwaway index on every call: you are missing an index</td></tr>
+    <tr><td><code>USE TEMP B-TREE FOR ORDER BY</code></td><td>a sort of the result rows; fine for a few rows</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>Indexes are not free: every INSERT/UPDATE updates <b>every</b> index, and they use disk. Index the queries you run often; don't index every column. And a correct index can be correctly ignored: if the query returns a big share of the table, a Seq Scan is cheaper.</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>Join columns (foreign keys like <code>bookings.train_id</code>) are the classic missing index. Postgres indexes primary keys and UNIQUE columns for you, <b>not</b> foreign keys.</p></div>
+  <div class="callout why"><strong>Why a new migration file</strong><p>Add the index as <code>migrations/02_....sql</code>, never by editing <code>01_...</code>: production already applied 01 (Flyway would refuse the changed checksum). On a live Postgres table use <code>CREATE INDEX CONCURRENTLY</code>: writes continue, but it builds slower and <b>cannot run inside a transaction</b> (plain <code>CREATE INDEX</code> blocks writes, not reads).</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="load-conn">Connections and pool math</h3>
+  <p>A Postgres connection is a separate server process with its own memory, so there is a hard cap: <code>max_connections</code> (default <b>100</b>). A <b>pool</b> keeps up to <code>pool_size</code> connections open per app process. Every server brings its own pool, so connections <b>multiply</b> when you scale out. Connection 101 is <b>refused</b>:</p>
+  <div class="err"><pre>FATAL:  sorry, too many clients already</pre><p><b>Means:</b> the total of all pools + other clients went over <code>max_connections</code>. Postgres does not queue it.</p><p><b>Fix:</b> size pools on purpose, add a pool wait timeout, leave autoscaler headroom, or put a pooler (PgBouncer / Supavisor) in front.</p></div>
+  <pre class="term"><span class="c"># the formula: count EVERY client at the WORST case</span>
+servers_max x pool_size + other pools (workers, cron) + humans  &lt;=  max_connections - spare
+
+8 x 10 + 5 = 85  &lt;= 100 - 10 = 90    OK
+8 x 14 + 5 = 117 &gt;  90                OVER  (fits at 6 servers: 6 x 14 + 5 = 89, breaks when the autoscaler adds 2)
+8 x 11 + 5 = 93  &gt;  90                OVER  (forgot the spare)
+200 serverless x 5 = 1000             10x over -&gt; a pooler, not a bigger limit</pre>
+  <table class="cmd"><thead><tr><th>Setting</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>pool_size</code> / node-postgres <code>max</code></td><td>connections this process may hold</td></tr>
+    <tr><td><code>wait_timeout_ms</code> / <code>connectionTimeoutMillis</code></td><td>wait up to this long for a free pooled connection, then fail. 0 = fail at once. Must be bounded</td></tr>
+    <tr><td>pooler <b>session</b> mode</td><td>a DB connection stays with one client until it disconnects</td></tr>
+    <tr><td>pooler <b>transaction</b> mode</td><td>lent per transaction: far more sharing, but no prepared statements / session locks</td></tr>
+    <tr><td><code>SHOW max_connections;</code></td><td>the limit (changing it needs a restart)</td></tr>
+    <tr><td><code>SELECT count(*) FROM pg_stat_activity;</code></td><td>connections open right now</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>"Scale out the app servers" makes the DB problem <b>worse</b> (more pools). "90% busy is fine" is wrong: queues explode near 100% (wait ~ ρ/(1−ρ): 1 at 50%, 9 at 90%, 99 at 99%).</p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="load-race">The last seat: check-then-act and its fixes</h3>
+  <p><code>booked = 99</code>, <code>capacity = 100</code>. Two requests both read 99, both decide "seat free", both write: 2 bookings for 1 seat. Unit tests pass because they send one request at a time.</p>
+  <pre class="term"><span class="c"># BUG: two statements, a gap between them</span>
+booked, capacity = conn.execute("SELECT booked, capacity FROM trains WHERE id = ?", (tid,)).fetchone()
+if booked &gt;= capacity: return 409
+<span class="c">#   &lt;- the other request runs here</span>
+conn.execute("UPDATE trains SET booked = booked + 1 WHERE id = ?", (tid,))
+
+<span class="c"># FIX 1: check AND act in one statement</span>
+cur = conn.execute("UPDATE trains SET booked = booked + 1 WHERE id = ? AND booked &lt; capacity", (tid,))
+conn.commit()
+return 409 if cur.rowcount == 0 else 201       <span class="c"># Postgres: ... RETURNING booked; 0 rows = full</span></pre>
+  <table class="cmd"><thead><tr><th>Approach</th><th>Stops the oversell?</th><th>Notes</th></tr></thead><tbody>
+    <tr><td>Fix 1: <code>UPDATE ... WHERE booked &lt; capacity</code></td><td>yes</td><td>simplest; 1 row = seat, 0 rows = <b>409 Conflict</b></td></tr>
+    <tr><td>Fix 2: <code>BEGIN; SELECT ... FOR UPDATE; ...; COMMIT;</code></td><td>yes</td><td>locks that <b>row</b> (not the table); others wait; for multi-statement logic</td></tr>
+    <tr><td>Fix 3: <code>CHECK (booked &lt;= capacity)</code>, <code>UNIQUE (train_id, seat_no)</code></td><td>yes (as an error)</td><td>safety net: turns an oversell into an error (500), not a friendly 409</td></tr>
+    <tr><td>wrap old read+write in <code>BEGIN/COMMIT</code></td><td><b>no</b></td><td>a transaction is all-or-nothing, not mutual exclusion</td></tr>
+    <tr><td>retry loop / index on train_id</td><td><b>no</b></td><td>irrelevant to the race</td></tr>
+    <tr><td>SERIALIZABLE</td><td>yes</td><td>Postgres aborts one transaction; you <b>retry</b></td></tr>
+    <tr><td>optimistic locking (<code>version</code> column)</td><td>yes</td><td><code>WHERE id = ? AND version = ?</code>; 0 rows = someone changed it, retry</td></tr>
+    <tr><td>distributed lock (Redis)</td><td>-</td><td>only for state <b>outside</b> one database</td></tr>
+  </tbody></table>
+  <p><b>Testing a race without luck.</b> Real threads make a flaky test. Instead, put a hook in the gap (<code>pause()</code>) and let the test run user B inside it. Same interleaving every run:</p>
+  <pre class="term">def test_last_seat_two_users():
+    conn = make_db(capacity=100, booked=99)
+    results = two_users_at_once(conn, 1)     <span class="c"># B runs inside A's pause()</span>
+    assert sorted(results) == [201, 409]
+    assert booked(conn) == 100
+
+<span class="p">$</span> pytest
+E   assert [201, 201] == [201, 409]          <span class="c"># before the fix: both got the seat</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>WHERE booked &lt;= capacity</code> lets 100 become 101: it must be <code>&lt;</code>. In sqlite you put a CHECK in <code>CREATE TABLE</code>; in Postgres: <code>ALTER TABLE trains ADD CONSTRAINT booked_le_capacity CHECK (booked &lt;= capacity);</code></p></div>
+
+  <!-- ============================================================ -->
+  <h3 class="sub" id="load-scenarios">Worked scenarios</h3>
+
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> How long do the DB trips take?</summary>
+    <div class="body"><p>A page lists 40 orders and fetches each order's items in a loop. The DB is 25 ms away. Roughly how long is spent on DB round trips, and what is it after a JOIN?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">before: (1 + 40) x 25 ms = 1,025 ms ≈ 1 s
+after:   1 x 25 ms       =    25 ms   (2 queries with IN (...) = 50 ms)</pre><p>N+1 cost is trips x latency; an index on order_items would make each trip a bit faster but keep all 41.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which index for the bookings search?</summary>
+    <div class="body"><p>Hot queries: <code>WHERE user_id = ? AND status = ?</code> and <code>WHERE user_id = ?</code>. A nightly report filters <code>WHERE status = ?</code>. Write the migration, and say what the plan for each query shows.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">-- migrations/03_add_bookings_user_status_index.sql
+CREATE INDEX idx_bookings_user_status ON bookings (user_id, status);
+
+user_id + status : SEARCH bookings USING INDEX idx_bookings_user_status (user_id=? AND status=?)
+user_id only     : SEARCH bookings USING INDEX idx_bookings_user_status (user_id=?)
+status only      : SCAN bookings      -- second column alone: fine for a nightly report</pre><p>Leading column = the one every hot query filters on. A separate index for the report would cost every insert.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> 12 servers, pool 8, plus a cron job</summary>
+    <div class="body"><p><code>max_connections = 100</code>. 12 app servers with pool 8, a cron job with pool 5. What happens at peak? With 10 spare and up to 9 servers and no cron job, what is the largest pool?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">12 x 8 + 5 = 101 &gt; 100   -&gt; one connection refused: FATAL: sorry, too many clients already
+9 x p &lt;= 100 - 10 = 90   -&gt; p = 10</pre><p>Count every client, at the most servers the autoscaler may run. Add a bounded wait timeout so a short spike waits instead of failing.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> "We wrapped it in a transaction and still oversold"</summary>
+    <div class="body"><p>The code does <code>BEGIN; SELECT count(*) FROM bookings WHERE train_id = 1; -- if &lt; capacity: INSERT ...; COMMIT;</code>. 10 requests at once for the last seat: 3 succeed. Why, and give two fixes plus a safety net.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">-- why: all 10 read the same count before any of them inserted (a transaction is not a lock)
+-- fix 1
+UPDATE trains SET booked = booked + 1 WHERE id = 1 AND booked &lt; capacity RETURNING booked;  -- 0 rows -&gt; 409
+-- fix 2
+BEGIN; SELECT capacity FROM trains WHERE id = 1 FOR UPDATE; SELECT count(*) ...; INSERT ...; COMMIT;
+-- safety net
+ALTER TABLE trains ADD CONSTRAINT booked_le_capacity CHECK (booked &lt;= capacity);
+ALTER TABLE bookings ADD CONSTRAINT uniq_seat UNIQUE (train_id, seat_no);</pre><p>A full train is an expected outcome: <b>409 Conflict</b>, not 500.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Fixed the N+1, plan still says SCAN</summary>
+    <div class="body"><p>You rewrote the departures board as one <code>LEFT JOIN</code> query and added an index on <code>trains (from_station, journey_date)</code>. The plan now reads:</p>
+      <pre class="term">SEARCH t USING INDEX idx_trains_station_date (from_station=? AND journey_date=?)
+SCAN b LEFT-JOIN
+USE TEMP B-TREE FOR ORDER BY</pre><p>What is still wrong and what do you add?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">-- for each matching train, the join reads ALL bookings: the join column has no index
+CREATE INDEX idx_bookings_train ON bookings (train_id);
+-- plan: SEARCH b USING COVERING INDEX idx_bookings_train (train_id=?) LEFT-JOIN</pre><p>Round trips and full reads are separate problems; check both the query count and every plan line. TEMP B-TREE is just sorting ~20 result rows.</p></details>
+    </div></details>
+
+  <!-- ============================================================ -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="load-01"> <code>labs/09-load/01-n-plus-one-join</code>
+      <span>Rewrite a 1+N "my bookings" function as one JOIN; a query-counting pytest must pass</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="load-02"> <code>labs/09-load/02-quiz-index-leading-column</code>
+      <span>Write migration 02 with the composite index in the right order; save the plan with &gt; plan.txt; commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="load-03"> <code>labs/09-load/03-quiz-last-seat-race</code>
+      <span>Failing race test commit, then conditional UPDATE + 409 + CHECK constraint commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="load-04"> <code>labs/09-load/04-quiz-pool-sizing</code>
+      <span>Fix the budget test to the worst case, add a timeout test, size pools.toml for 8 servers</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="load-05"> <code>labs/09-load/05-twist-slow-departures</code>
+      <span>N+1 AND missing indexes on one endpoint: LEFT JOIN + two indexes until no SCAN</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>N+1</code> 1 list query + 1 per row; cost = queries x latency (51 x 30 ms ≈ 1.5 s)</li>
+    <li><code>JOIN</code> / <code>WHERE id IN (...)</code> / <code>= ANY($1)</code> fix N+1 (1-2 queries); an index does not</li>
+    <li><code>conn.set_trace_callback(list.append)</code> count sqlite statements in a test</li>
+    <li><code>LEFT JOIN ... count(b.id)</code> keep parents with 0 children, count them as 0</li>
+    <li><code>CREATE INDEX idx ON t (always_filtered, sometimes_filtered);</code> leading column first</li>
+    <li><code>(a, b)</code> helps <code>a</code> and <code>a + b</code>; not <code>b</code> alone</li>
+    <li><code>EXPLAIN QUERY PLAN sql</code> sqlite: <code>SCAN</code> = full read, <code>SEARCH ... USING INDEX</code> = lookup</li>
+    <li><code>EXPLAIN ANALYZE sql</code> Postgres: <code>Seq Scan</code> vs <code>Index Scan</code> + <code>Index Cond</code>, real times</li>
+    <li><code>CREATE INDEX CONCURRENTLY</code> no write blocking, slower, never inside BEGIN/COMMIT</li>
+    <li>every index slows every INSERT/UPDATE; index join (foreign key) columns</li>
+    <li><code>servers_max x pool + other clients &lt;= max_connections - spare</code> (default limit 100)</li>
+    <li><code>FATAL: sorry, too many clients already</code> = over the limit; refused, not queued</li>
+    <li>pool wait timeout: bounded wait for a free connection (0 = fail at once)</li>
+    <li>pooler (PgBouncer, Supavisor): transaction mode shares more, loses prepared statements / session locks</li>
+    <li><code>UPDATE ... SET booked = booked + 1 WHERE id = ? AND booked &lt; capacity</code>; <code>rowcount == 0</code> → 409</li>
+    <li><code>SELECT ... FOR UPDATE</code> inside BEGIN/COMMIT locks the row; others wait</li>
+    <li><code>CHECK (booked &lt;= capacity)</code>, <code>UNIQUE (train_id, seat_no)</code> = safety net, not the fix</li>
+    <li>BEGIN/COMMIT around check-then-insert does <b>not</b> stop overselling</li>
+  </ul></div>
+</section>

@@ -1,0 +1,408 @@
+<section class="topic" id="demos" data-title="T5 demos (professor)">
+  <header class="topic-head">
+    <span class="tag">Lecture demos</span>
+    <h2>T5 demos: deploy, break, go back, flag, roll out</h2>
+    <p class="lede">Run the professor's two T5 demos yourself, predict every output, and tie each moment to the slide idea it proves.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>A <b>pipeline</b> is a row of gates: <b>Test → Build → Migrate → Deploy → Check health → Switch</b>. Any gate fails, the pipeline stops and <b>production is unchanged</b>.
+    Every build is an <b>image tagged twice</b> (version + content id), so going back = <b>start an old image again</b>. That is fast, but it only changes <b>code</b>. The <b>database</b> stays as the last migration left it.
+    So a migration must keep the <b>old</b> code working (add, don't rename or drop). And a <b>flag</b> is an <code>if</code> whose condition lives in the database or a file: flipping it changes behaviour on the next request, with no deploy.
+    A <b>percentage rollout</b> puts each user in a fixed bucket <code>sha256(flag:user) % 100</code>. The user is ON if their bucket is <code>&lt; percent</code>.</p>
+  </div>
+
+  <!-- ===================== SETUP ===================== -->
+  <h3 class="sub" id="demos-setup">Before you start: what you need and how to run</h3>
+  <p>Everything runs in Docker. You need no Node, psql or Postgres on the host. The demos live in <code>demos/t5/</code>. <code>demos/README.md</code> has the full file list, prerequisites and troubleshooting.</p>
+
+  <table class="cmd"><thead><tr><th>Need</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Docker running (no sudo)</td><td>DB, proxy, app, tests and <code>rollout.js</code> all run in containers</td></tr>
+      <tr><td>Port <b>8080</b> free</td><td>Caddy, the load balancer, publishes <code>8080:8080</code>. App containers are <i>not</i> published, only reachable through Caddy.</td></tr>
+      <tr><td><code>postgres:16-alpine</code>, <code>node:22-alpine</code>, <code>caddy:2.8.4-alpine</code></td><td>pulled by <code>./preflight.sh</code></td></tr>
+      <tr><td>Internet the first time</td><td><code>npm ci</code> inside the image build downloads <code>pg</code>. After preflight, builds come from cache.</td></tr>
+    </tbody></table>
+
+  <pre class="term"><span class="p">$</span> cd demos/t5
+<span class="p">$</span> ./preflight.sh smoke
+2. Ports
+  PASS  port 8080 is free
+3. Download images
+  PASS  postgres:16-alpine
+  PASS  node:22-alpine
+  PASS  caddy:2.8.4-alpine
+4. Build the TiffinGo releases
+  PASS  t5-pipeline (4 releases)
+5. Smoke test
+  PASS  t5-pipeline: deploy 2.3, deploy 2.4, roll back to 2.3
+  PASS  t5-rollout: 10,000 users bucketed
+All good.</pre>
+
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>cd t5-pipeline &amp;&amp; ./demo.sh</code></td><td>Demo 1, 12 steps, Enter between steps. <code>./demo.sh 7</code> resumes at step 7.</td></tr>
+      <tr><td><code>./traffic.sh</code> (second terminal)</td><td>fake customers, 3/second. Every 5th request is <code>customer=kabir&amp;group=1</code>. kabir has no saved group.</td></tr>
+      <tr><td><code>cd t5-rollout &amp;&amp; ./demo.sh</code></td><td>Demo 2, 9 steps, one terminal</td></tr>
+      <tr><td><code>DEMO_NOPAUSE=1 ./demo.sh</code></td><td>run all steps without waiting for Enter</td></tr>
+      <tr><td><code>./reset-all.sh</code></td><td>remove everything both demos created (containers, network, <code>tiffingo</code> images, state files)</td></tr>
+    </tbody></table>
+
+  <p>What is running once <code>setup.sh</code> and a deploy have finished:</p>
+  <pre class="term">your browser / curl / traffic.sh
+        │  http://localhost:8080
+        ▼
+  t5-proxy  (Caddy)      reverse_proxy tiffingo-2-3-1793711655:3000   ← the ONE live app container
+        │  docker network "tiffingo"
+        ▼
+  tiffingo-2-3-...  (image tiffingo:2.3, node + pg)
+        │  DATABASE_URL=postgres://postgres:postgres@t5-db:5432/postgres
+        ▼
+  t5-db  (postgres:16-alpine)   tables: schema_migrations, orders, [flags]</pre>
+  <div class="callout tip"><strong>Tip</strong><p>Two endpoints matter. <code>/healthz</code> runs only <code>SELECT 1</code> and answers <code>{"status":"ok","version":"2.3"}</code>. <code>/checkout?customer=X&amp;group=0|1</code> answers <code>ok order #17 Rs 240 single (v2.3)</code>, or <code>ERROR &lt;message&gt; (v2.4)</code> with HTTP 500.</p></div>
+
+  <!-- ===================== PART A ===================== -->
+  <h3 class="sub" id="demos-a">Demo 1, Part A (slide 14): deploy, break, redeploy the previous image</h3>
+
+  <p><b>Step 1 · Start the platform and deploy v2.3</b></p>
+  <pre class="term"><span class="p">$</span> ./setup.sh
+Network:       tiffingo
+Database:      t5-db (postgres:16-alpine)
+Load balancer: t5-proxy (caddy) on http://localhost:8080
+Platform ready. Nothing deployed yet.
+<span class="p">$</span> ./deploy.sh 2.3
+Deploying TiffinGo v2.3   (live now: nothing)
+[1/6] Test          unit tests in a fresh container
+         $ docker run --rm node:22-alpine node --test common/pricing.test.js
+         3 tests passed
+[2/6] Build         one image, tagged with the version and the code's id
+         $ docker build -t tiffingo:2.3 -t tiffingo:cdf64da .
+         tiffingo:2.3 = tiffingo:cdf64da
+[3/6] Migrate       releases/2.3/migrate.sql
+         CREATE TABLE IF NOT EXISTS orders (   ◀ new table
+           ...  items      text NOT NULL, ...
+[4/6] Deploy        start v2.3 beside the old version (old one still serving)
+         $ docker run -d --name tiffingo-2-3-1793711655 --network tiffingo tiffingo:2.3
+[5/6] Check health
+         {"status":"ok","version":"2.3"}
+[6/6] Switch        send traffic to v2.3
+         $ caddy reload   # load balancer now sends traffic to tiffingo-2-3-1793711655
+Deployed v2.3 in 10.9 s.</pre>
+  <p><b>Notice:</b> the order of the six stages, and the build line <code>tiffingo:2.3 = tiffingo:cdf64da</code>: <b>one build, two tags</b>. The 7-character id is a hash of the code (it stands in for the commit id).</p>
+  <div class="callout why"><strong>Slide idea</strong><p>"The order of the steps": Test, Build, Migrate, Deploy, Check health. "Build once, tag with the commit id (<code>tiffingo:3f9a2c1</code>), promote the same image."</p></div>
+
+  <p><b>Terminal 2: <code>./traffic.sh</code></b></p>
+  <pre class="term">18:44:28  ok     order #1  Rs 240  single  (v2.3)
+18:44:29  ok     order #4  Rs 240  single  (v2.3)
+18:44:29  ok     order #5  Rs 240  single  (v2.3)   <span class="c"># kabir, group=1: v2.3 has no group orders, so it's a single order</span></pre>
+
+  <p><b>Step 2 · Which version is live?</b></p>
+  <pre class="term"><span class="p">$</span> curl -s http://localhost:8080/healthz
+{"status":"ok","version":"2.3"}</pre>
+
+  <p><b>Step 3 · The v2.4 change and its migration</b> (diff of <code>releases/2.3/server.js</code> → <code>2.4</code>, trimmed)</p>
+  <pre class="term">+const GROUPS = { asha: ["asha", "ravi", "meena"] };     ◀ only the developer's own account has a saved group
++  if (group) {
++    const members = GROUPS[customer];
++    items = members.map(() =&gt; "paneer thali");          ◀ kabir has no saved group, so members is undefined
+<span class="p">$</span> cat app/releases/2.4/migrate.sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS group_id int;   ◀ safe: old code ignores the new column</pre>
+  <p><b>Notice:</b> the migration only <b>adds</b> a nullable column. Remember that for step 6.</p>
+
+  <p><b>Step 4 · 19:00, deploy v2.4</b></p>
+  <pre class="term"><span class="p">$</span> ./deploy.sh 2.4
+[1/6] Test          3 tests passed
+[2/6] Build         tiffingo:2.4 = tiffingo:e4e9911
+[3/6] Migrate       ALTER TABLE orders ADD COLUMN IF NOT EXISTS group_id int;
+[4/6] Deploy        $ docker run -d --name tiffingo-2-4-1793711696 ...
+[5/6] Check health  {"status":"ok","version":"2.4"}
+[6/6] Switch        old container tiffingo-2-3-1793711655 stopped
+Deployed v2.4 in 12.2 s.
+<span class="c"># terminal 2: the switch had no gap (v2.3 → v2.4 on the next request), then every 5th line is red</span>
+18:45:00  ok     order #80  Rs 240  single  (v2.3)
+18:45:00  ok     order #81  Rs 240  single  (v2.4)
+18:45:04  ERROR  Cannot read properties of undefined (reading 'map')  (v2.4)
+18:45:05  ok     order #89  Rs 240  single  (v2.4)
+...
+<span class="p">$</span> curl -s 'localhost:8080/checkout?customer=asha&amp;group=1'
+ok     order #93  Rs 540  group  (v2.4)          <span class="c"># the developer's own test case works</span>
+<span class="p">$</span> curl -s 'localhost:8080/checkout?customer=kabir&amp;group=1'
+ERROR  Cannot read properties of undefined (reading 'map')  (v2.4)   <span class="c"># HTTP 500</span></pre>
+  <p><b>Notice:</b> every gate was green, and still <b>1 in 5 checkouts fail</b>. The tests only cover <code>pricing.js</code>. The health check only runs <code>SELECT 1</code>. Neither one tries a group order from a customer without a saved group.</p>
+  <div class="callout why"><strong>Slide idea</strong><p>The incident: "errors for 1 in 5 orders". <b>Gates only catch what they check</b>: <code>/healthz</code> is a readiness check (is the process up, can it reach the DB), not a test of business logic. That's why you still need fast ways back.</p></div>
+
+  <p><b>Step 5 · 19:11, what can we go back to?</b></p>
+  <pre class="term"><span class="p">$</span> docker images tiffingo
+IMAGE              ID             DISK USAGE   CONTENT SIZE
+tiffingo:2.3       8cd72f79716f        244MB         62.1MB
+tiffingo:2.4       40b1885db61e        244MB         62.1MB
+tiffingo:cdf64da   8cd72f79716f        244MB         62.1MB
+tiffingo:e4e9911   40b1885db61e        244MB         62.1MB</pre>
+  <p><b>Notice:</b> <code>2.3</code> and <code>cdf64da</code> have the <b>same image ID</b>: one image, two names. The old image is still there to go back to.</p>
+
+  <p><b>Step 6 · Redeploy the previous image</b></p>
+  <pre class="term"><span class="p">$</span> ./rollback.sh 2.3
+Rolling back to v2.3 from image tiffingo:2.3   (live now: v2.4)
+         nothing to test, build or migrate: the image already exists
+[1/3] Start         $ docker run -d --name tiffingo-2-3-1793711737 --network tiffingo tiffingo:2.3
+[2/3] Check health  {"status":"ok","version":"2.3"}
+[3/3] Switch        old container tiffingo-2-4-1793711696 stopped
+Back on v2.3 in 6.2 s.
+<span class="p">$</span> curl -s localhost:8080/healthz
+{"status":"ok","version":"2.3"}
+<span class="c"># terminal 2: all green again, (v2.3)</span>
+<span class="p">$</span> docker exec t5-db psql -U postgres -c 'select version from schema_migrations'
+ 2.3
+ 2.4          <span class="c"># the 2.4 migration is still applied; group_id is still in the table</span></pre>
+  <p><b>Notice:</b> three stages instead of six, a few seconds instead of a full pipeline. <code>rollback.sh</code> <b>never touches the database</b>. It worked only because v2.3 doesn't mind the extra <code>group_id</code> column.</p>
+  <div class="callout why"><strong>Slide idea</strong><p>"Three ways back": revert + redeploy (minutes) &gt; <b>redeploy the previous image (~1 minute hosted, seconds here: nothing is rebuilt)</b> &gt; flag off (seconds).</p></div>
+
+  <!-- ===================== PART B ===================== -->
+  <h3 class="sub" id="demos-b">Demo 1, Part B (slide 15): the rename that rollback can't undo</h3>
+
+  <p><b>Step 7 · Deploy v2.4-rename</b>: same code, but it writes <code>order_items</code>, and the migration renames the column.</p>
+  <pre class="term"><span class="p">$</span> cat app/releases/2.4-rename/migrate.sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS group_id int;   ◀ safe: old code ignores the new column
+ALTER TABLE orders RENAME COLUMN items TO order_items;      ◀ breaks code that still uses the old name
+<span class="p">$</span> ./deploy.sh 2.4-rename
+[3/6] Migrate       ... RENAME COLUMN items TO order_items
+[4/6] Deploy        start v2.4-rename beside the old version (old one still serving)
+[5/6] Check health  {"status":"ok","version":"2.4-rename"}
+[6/6] Switch        old container tiffingo-2-3-1793711737 stopped
+Deployed v2.4-rename in 12.7 s.
+<span class="c"># terminal 2: the migration ran, but v2.3 is still the live container for ~4 s</span>
+18:46:08  ok     order #224  Rs 240  single  (v2.3)
+18:46:08  ERROR  column "items" of relation "orders" does not exist  (v2.3)
+18:46:09  ERROR  column "items" of relation "orders" does not exist  (v2.3)
+...         <span class="c"># 8 failed requests in a row</span>
+18:46:12  ERROR  column "items" of relation "orders" does not exist  (v2.3)
+18:46:12  ok     order #225  Rs 240  single  (v2.4-rename)
+18:46:14  ERROR  Cannot read properties of undefined (reading 'map')  (v2.4-rename)   <span class="c"># the old group-order bug is still there</span></pre>
+  <p><b>Notice:</b> the outage starts <b>before</b> the new code is live. Step 3 (migrate) runs while step 4's old code is still serving.</p>
+  <div class="callout why"><strong>Slide idea</strong><p><b>Migrate before deploy</b>, and "during step 4, old and new code run side by side". So every migration must be compatible with the <b>old</b> code. A <code>RENAME</code> or <code>DROP</code> is not.</p></div>
+
+  <p><b>Step 8 · Roll back to v2.3 again</b> ("it worked last time")</p>
+  <pre class="term"><span class="p">$</span> ./rollback.sh 2.3
+Back on v2.3 in 8.1 s.
+<span class="p">$</span> curl -s localhost:8080/healthz
+{"status":"ok","version":"2.3"}          <span class="c"># healthy...</span>
+<span class="c"># terminal 2: ...and 100% red</span>
+18:46:47  ERROR  column "items" of relation "orders" does not exist  (v2.3)
+18:46:48  ERROR  column "items" of relation "orders" does not exist  (v2.3)
+<span class="p">$</span> docker exec t5-db psql -U postgres -c '\d orders'
+   Column    |           Type           | Nullable
+-------------+--------------------------+----------
+ id          | integer                  | not null
+ customer    | text                     | not null
+ order_items | text                     | not null      <span class="c"># v2.3 asks for items</span>
+ total       | integer                  | not null
+ created_at  | timestamp with time zone | not null
+ group_id    | integer                  |</pre>
+  <p><b>Notice:</b> <code>/healthz</code> says ok because <code>SELECT 1</code> doesn't use the <code>orders</code> table. The code went back. The column didn't.</p>
+  <div class="callout why"><strong>Slide idea</strong><p>"What going back cannot undo: a dropped or renamed column." <b>Code is reversible. Data is not.</b> It also answers the slide-6 poll: after a rollback, checkout fails on v2.3 too.</p></div>
+
+  <p><b>Step 9 · The only way out is forward</b></p>
+  <pre class="term"><span class="p">$</span> docker exec t5-db psql -U postgres -c 'ALTER TABLE orders RENAME COLUMN order_items TO items;'
+ALTER TABLE
+<span class="c"># terminal 2 recovers on the next request</span>
+18:47:06  ok     order #292  Rs 240  single  (v2.3)</pre>
+  <p><b>Notice:</b> the fix is a <b>new</b> change to the database (fix forward), not a rollback. Done safely, it would have been expand/contract. First <code>ADD COLUMN order_items</code>, then write both columns, backfill, read the new one. <code>DROP COLUMN items</code> comes last, and that is the irreversible step.</p>
+  <div class="callout trap"><strong>Trap</strong><p>This manual <code>ALTER</code> is not recorded in <code>schema_migrations</code> (it still lists <code>2.4-rename</code> as applied). In a real team, write it as the next migration file so every database gets it.</p></div>
+
+  <!-- ===================== PART C ===================== -->
+  <h3 class="sub" id="demos-c">Demo 1, Part C (slide 18): the same bug behind a flag</h3>
+
+  <p><b>Step 10 · Deploy v2.5</b>: the only code change is an <code>if</code> around the group-order code.</p>
+  <pre class="term">+async function flagOn(db, name) {
++  const { rows } = await db.query("SELECT enabled FROM flags WHERE name = $1", [name]);   ◀ read on every request
++  return rows.length &gt; 0 &amp;&amp; rows[0].enabled;
++}
+-  if (group) {
++  const groupOrder = group &amp;&amp; await flagOn(db, "group_order");
++  if (groupOrder) {
+     items = members.map(() =&gt; "paneer thali");   ◀ the same bug, still here, now behind the flag
+<span class="p">$</span> ./deploy.sh 2.5
+[3/6] Migrate
+         CREATE TABLE IF NOT EXISTS flags (name text PRIMARY KEY, enabled boolean NOT NULL);   ◀ new table
+         INSERT INTO flags VALUES ('group_order', false) ON CONFLICT DO NOTHING;               ◀ the flag starts OFF
+Deployed v2.5 in 10.3 s.
+<span class="c"># terminal 2: no errors at all; kabir's group orders are served as single orders</span>
+18:47:27  ok     order #347  Rs 240  single  (v2.5)</pre>
+
+  <p><b>Step 11 · Switch the flag on</b></p>
+  <pre class="term"><span class="p">$</span> ./flag.sh on
+         $ UPDATE flags SET enabled = true WHERE name = 'group_order';
+group_order is now ON. No deploy. The next request sees it.
+18:47:40  ERROR  Cannot read properties of undefined (reading 'map')  (v2.5)
+18:47:42  ERROR  Cannot read properties of undefined (reading 'map')  (v2.5)
+<span class="p">$</span> curl -s 'localhost:8080/checkout?customer=asha&amp;group=1'
+ok     order #383  Rs 540  group  (v2.5)</pre>
+
+  <p><b>Step 12 · The kill switch</b></p>
+  <pre class="term"><span class="p">$</span> ./flag.sh off
+group_order is now OFF. No deploy. The next request sees it.
+18:47:43  ok     order #384  Rs 240  single  (v2.5)     <span class="c"># errors stop on the very next request</span>
+<span class="p">$</span> curl -s localhost:8080/healthz
+{"status":"ok","version":"2.5"}
+<span class="p">$</span> docker ps --format '{{.Names}} {{.Image}}'
+tiffingo-2-5-1793711839 tiffingo:2.5      <span class="c"># the SAME container before and after both flips</span></pre>
+  <p><b>Notice:</b> no image, no container, no deploy changed. Only one database row did. Everything else in v2.5 kept running.</p>
+  <div class="callout why"><strong>Slide idea</strong><p>"A flag is an if-statement whose condition lives outside the code." Kill switch = the fastest way back, seconds. "Read on every request: changes land at once, but every request hits the database." The slide-17 poll answer: <b>C, switch the flag off</b>.</p></div>
+
+  <!-- ===================== GATE ===================== -->
+  <h3 class="sub" id="demos-gate">Bonus: what a failing gate looks like</h3>
+  <p>The class demo never fails a gate. Here is a real run (in a scratch copy) with one price broken in <code>common/pricing.js</code> (<code>"paneer thali": 18</code> instead of <code>180</code>), deploying 2.4 on top of a live 2.3:</p>
+  <pre class="term"><span class="p">$</span> ./deploy.sh 2.4
+Deploying TiffinGo v2.4   (live now: v2.3)
+[1/6] Test          unit tests in a fresh container
+# tests 3
+# pass 1
+# fail 2
+  ✗ tests failed
+Pipeline stopped. Production is unchanged: still v2.3.
+<span class="p">$</span> echo $?
+1
+<span class="p">$</span> docker images tiffingo --format '{{.Repository}}:{{.Tag}}'
+tiffingo:2.3
+tiffingo:cdf64da          <span class="c"># no tiffingo:2.4: the build never ran, the migration never ran</span></pre>
+  <div class="callout why"><strong>Slide idea</strong><p>"Each step's exit code says pass or fail. One failure stops the job." A failed gate means the later stages never run: no build, no migration, no switch.</p></div>
+
+  <!-- ===================== ROLLOUT ===================== -->
+  <h3 class="sub" id="demos-rollout">Demo 2 (slide 19): percentage rollout with sticky buckets</h3>
+  <p>Each step runs <code>docker run --rm -v "$PWD":/demo -w /demo node:22-alpine node rollout.js &lt;cmd&gt;</code>. If you have Node, <code>node rollout.js &lt;cmd&gt;</code> gives the same output.</p>
+
+  <div class="anatomy">
+    <code><span>sha256("group_order:" + user)</span> <span>.readUInt32BE(0)</span> <span>% 100</span> <span>&lt; rollout_percent</span></code>
+    <ol>
+      <li>hash the flag name <b>and</b> the user id together (same input → same hash, always)</li>
+      <li>first 4 bytes as a number, 0 to 4,294,967,295</li>
+      <li>remainder → bucket 0..99</li>
+      <li>ON if the bucket is below the percentage read from <code>flags.json</code> (on every call)</li>
+    </ol>
+  </div>
+
+  <p><b>Steps 1–3 · Where the flag lives, the function, five users</b></p>
+  <pre class="term"><span class="p">$</span> cat flags.json
+{
+  "group_order": { "rollout_percent": 10 }
+}
+<span class="p">$</span> node rollout.js explain asha ravi meena kabir zoya
+flags.json says group_order.rollout_percent = 10, so ON means bucket &lt; 10
+user      sha256("group_order:" + user)   first 4 bytes as a number   % 100   ON?
+asha      1c386e8f...                        473,460,367             67   off (67 &gt;= 10)
+ravi      9ad54706...                      2,597,668,614             14   off (14 &gt;= 10)
+meena     5d1c93b1...                      1,562,153,905              5   ON  (5 &lt; 10)
+kabir     443daf98...                      1,144,893,336             36   off (36 &gt;= 10)
+zoya      f6b7a02e...                      4,139,229,230             30   off (30 &gt;= 10)</pre>
+
+  <p><b>Steps 4–5 · Is it fair?</b></p>
+  <pre class="term"><span class="p">$</span> node rollout.js spread
+Smallest bucket: 72 users (-28% from average). Largest: 133 (+33%). Average: 100.
+Buckets 0 to 9: 1,005 users = 10.05% of 10,000.
+<span class="p">$</span> node rollout.js spread 1000000
+Smallest bucket: 9,705 users (-3% from average). Largest: 10,238 (+2%). Average: 10,000.
+Buckets 0 to 9: 100,478 users = 10.05% of 1,000,000.</pre>
+  <p><b>Notice:</b> single buckets wobble, but ten together come out close to 10%, and closer with more users. It is <i>about</i> 10%, never exactly.</p>
+
+  <p><b>Step 6 · Why not <code>Math.random()</code>?</b> (three runs; the random row changes every run)</p>
+  <pre class="term"><span class="p">$</span> node rollout.js random asha
+Math.random() &lt; 0.10:               off off off off off off ON  off off off
+bucket("group_order", "asha") &lt; 10: off off off off off off off off off off
+Math.random() &lt; 0.10:               off off ON  off ON  off ON  off off off
+bucket("group_order", "asha") &lt; 10: off off off off off off off off off off</pre>
+  <p><b>Notice:</b> with <code>random()</code> asha's button appears and disappears. The hash gives the same answer every time.</p>
+
+  <p><b>Steps 7–8 · Roll out 10 → 50 → 100, then kill switch to 0</b></p>
+  <pre class="term"><span class="p">$</span> node rollout.js rollout
+rollout_percent = 10: 1,005 of 10,000 users ON (10.1%)
+<span class="p">$</span> echo '{ "group_order": { "rollout_percent": 50 } }' &gt; flags.json
+<span class="p">$</span> node rollout.js rollout
+rollout_percent = 50: 4,957 of 10,000 users ON (49.6%)
+Compared with 10%:   stayed ON: 1,005   newly ON: 3,952   turned off: 0
+<span class="p">$</span> echo '{ "group_order": { "rollout_percent": 100 } }' &gt; flags.json
+<span class="p">$</span> node rollout.js rollout
+rollout_percent = 100: 10,000 of 10,000 users ON (100.0%)
+Compared with 50%:   stayed ON: 4,957   newly ON: 5,043   turned off: 0
+<span class="p">$</span> echo '{ "group_order": { "rollout_percent": 0 } }' &gt; flags.json
+<span class="p">$</span> node rollout.js rollout
+rollout_percent = 0: 0 of 10,000 users ON (0.0%)
+Compared with 100%:  stayed ON: 0   newly ON: 0   turned off: 10,000</pre>
+  <p><b>Notice:</b> going up, <b>turned off is always 0</b>. Buckets don't move, only the line does. 0% is the kill switch: one edit, no deploy.</p>
+
+  <p><b>Step 9 · Why the flag name is inside the hash</b></p>
+  <pre class="term"><span class="p">$</span> node rollout.js overlap
+hash(flag name + user id):  group_order 1005, new_menu 1016, in both: 99
+hash(user id) only:         group_order 978, new_menu 978, in both: 978
+Without the flag name, the same 1,000 people test every new feature.</pre>
+  <div class="callout why"><strong>Slide idea</strong><p>"Percentage rollout uses <code>hash(user_id) % 100 &lt; 10</code>, not <code>random() &lt; 0.1</code>." Deterministic means sticky. A higher percentage only adds users. Salting with the flag name gives each flag an independent 10% (overlap ≈ 10% × 10% = 1%).</p></div>
+
+  <!-- ===================== MAP ===================== -->
+  <h3 class="sub" id="demos-map">Demo moment → slide idea</h3>
+  <table class="cmd"><thead><tr><th>You saw</th><th>It proves</th></tr></thead>
+    <tbody>
+      <tr><td><code>tiffingo:2.3 = tiffingo:cdf64da</code>, same IMAGE ID</td><td>build once, tag with the commit id, promote the same image</td></tr>
+      <tr><td><code>Pipeline stopped. Production is unchanged: still v2.3.</code></td><td>gated pipeline: exit code ≠ 0 stops everything after it</td></tr>
+      <tr><td>[3/6] Migrate runs before [4/6] Deploy; v2.3 fails during the rename deploy</td><td>migrate before deploy; migrations must work with the old code</td></tr>
+      <tr><td>v2.4 passes tests + <code>/healthz</code>, 1 in 5 checkouts fail</td><td><code>/healthz</code> = <code>SELECT 1</code> (readiness), tests cover pricing only: gates catch only what they check</td></tr>
+      <tr><td><code>rollback.sh</code>: 3 stages, "nothing to test, build or migrate"</td><td>redeploy the previous image, fast; it never touches the DB</td></tr>
+      <tr><td>healthy v2.3 + 100% red after the rename</td><td>code is reversible, data is not; fix forward / expand-contract</td></tr>
+      <tr><td><code>flag.sh off</code>, same container, errors stop next request</td><td>kill switch, seconds, no deploy</td></tr>
+      <tr><td>rollout 10 → 50 → 100: turned off 0</td><td>sticky buckets, gradual rollout</td></tr>
+      <tr><td>overlap 99 vs 978</td><td>salt the hash with the flag name</td></tr>
+    </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p><code>traffic.sh</code> is a <b>load generator</b>, not a traffic splitter. The proxy always points at exactly one container (blue-green switch). The demos have no canary or weighted split; that is only on the slides.</p></div>
+
+  <!-- ===================== SCENARIOS ===================== -->
+  <details class="scenario"><summary><span class="lvl drill">Predict</span> v2.3 is live, kabir sends <code>group=1</code></summary>
+    <div class="body"><p>Before step 4, <code>curl -s 'localhost:8080/checkout?customer=kabir&amp;group=1'</code>. What comes back?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">ok     order #5  Rs 240  single  (v2.3)</pre><p>v2.3's checkout ignores <code>group</code> completely: every order is a single "paneer thali, lassi" = Rs 240. The crash only exists from v2.4 on.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Predict</span> Deploy 2.4 when a test fails</summary>
+    <div class="body"><p>v2.3 is live. Someone sets <code>"paneer thali": 18</code> in <code>pricing.js</code> and runs <code>./deploy.sh 2.4</code>. What do <code>/healthz</code> and <code>docker images tiffingo</code> show afterwards? Is the <code>group_id</code> column there?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">Pipeline stopped. Production is unchanged: still v2.3.
+{"status":"ok","version":"2.3"}
+tiffingo:2.3   tiffingo:cdf64da      (no 2.4 image)</pre><p>Stage 1 fails (2 of 3 tests), so build, migrate, deploy and switch never run. No image, no <code>group_id</code> column, no new <code>schema_migrations</code> row.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Predict</span> Rollback after the additive migration</summary>
+    <div class="body"><p>v2.4 is live (its migration added <code>group_id</code>). You run <code>./rollback.sh 2.3</code>. (a) Does checkout work? (b) Is <code>group_id</code> still in <code>orders</code>? (c) What does <code>schema_migrations</code> list?</p>
+      <details class="answer"><summary>Show answer</summary><p>(a) Yes, all green: v2.3's <code>INSERT</code> names its columns and ignores the nullable <code>group_id</code>. (b) Yes. (c) <code>2.3</code> and <code>2.4</code>. <code>rollback.sh</code> only starts an old image and switches Caddy. It never runs SQL.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Predict</span> Healthy but broken</summary>
+    <div class="body"><p>After <code>./deploy.sh 2.4-rename</code> then <code>./rollback.sh 2.3</code>: what does <code>/healthz</code> return, what fraction of checkouts fail, and what is the fastest fix that does <b>not</b> deploy anything?</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">{"status":"ok","version":"2.3"}
+ERROR  column "items" of relation "orders" does not exist  (v2.3)    ← 100% of checkouts
+$ docker exec t5-db psql -U postgres -c 'ALTER TABLE orders RENAME COLUMN order_items TO items;'</pre><p><code>/healthz</code> only runs <code>SELECT 1</code>, so it can't see the missing column. Every checkout (not just 1 in 5) fails, because every <code>INSERT</code> uses <code>items</code>. Fix forward by renaming the column back.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Predict</span> Flag ON, who fails?</summary>
+    <div class="body"><p>v2.5 is live and you ran <code>./flag.sh on</code>. What do these return: (1) <code>customer=asha&amp;group=1</code>, (2) <code>customer=kabir&amp;group=1</code>, (3) <code>customer=kabir&amp;group=0</code>? After <code>./flag.sh off</code>, how many containers were restarted?</p>
+      <details class="answer"><summary>Show answer</summary><p>(1) <code>ok … Rs 540 group (v2.5)</code>: asha has a saved group of 3 thalis. (2) <code>ERROR Cannot read properties of undefined (reading 'map') (v2.5)</code>. (3) <code>ok … Rs 240 single</code>: the flag is only read when <code>group=1</code> (<code>group &amp;&amp; await flagOn(...)</code>). Zero containers restarted: <code>docker ps</code> shows the same <code>tiffingo-2-5-…</code> container.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Predict</span> Rollout from 10% to 15%</summary>
+    <div class="body"><p>Buckets for <code>group_order</code>: asha 67, ravi 14, meena 5, kabir 36, zoya 30. <code>flags.json</code> goes from 10 to 15. Who is ON before and after? Then a new flag <code>new_menu</code> is set to 10%: is meena guaranteed to be ON for it?</p>
+      <details class="answer"><summary>Show answer</summary><p>At 10%: only meena (5). At 15%: meena and ravi (14 &lt; 15). Nobody turns off when the percentage goes up. For <code>new_menu</code>, no guarantee: the hash input is <code>"new_menu:meena"</code>, so her bucket is different. That's why the overlap of two 10% flags is about 1%, not 10%.</p></details>
+    </div></details>
+
+  <!-- ===================== CHEAT ===================== -->
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>./preflight.sh smoke</code> pull images, pre-build, check 8080, test once</li>
+    <li><code>./setup.sh</code> network <code>tiffingo</code> + <code>t5-db</code> + <code>t5-proxy</code> on :8080</li>
+    <li><code>./deploy.sh 2.4</code> Test → Build (2 tags) → Migrate → Deploy beside old → Health → Switch</li>
+    <li><code>./rollback.sh 2.3</code> start old image → health → switch. No test, build or migrate. DB untouched.</li>
+    <li><code>./flag.sh on|off</code> = <code>UPDATE flags SET enabled = … WHERE name = 'group_order';</code></li>
+    <li><code>curl -s localhost:8080/healthz</code> version + <code>SELECT 1</code> only</li>
+    <li><code>docker images tiffingo</code> same IMAGE ID for <code>:2.3</code> and <code>:cdf64da</code></li>
+    <li><code>docker exec t5-db psql -U postgres -c '\d orders'</code> see the real columns</li>
+    <li><code>docker exec t5-db psql -U postgres -c 'ALTER TABLE orders RENAME COLUMN order_items TO items;'</code> fix forward</li>
+    <li>Safe while old code runs: <code>ADD COLUMN</code> (nullable), <code>CREATE TABLE</code>. Unsafe: <code>RENAME</code>, <code>DROP</code>.</li>
+    <li>Expand/contract: add new → write both → backfill → read new → stop using old → <b>DROP old (irreversible)</b></li>
+    <li>Three ways back: revert + pipeline (minutes) · redeploy previous image (~1 min) · flag off (seconds)</li>
+    <li><code>bucket = sha256(flag + ":" + user)[0..4] % 100</code>, ON if <code>bucket &lt; percent</code></li>
+    <li>Raise the percent → nobody turns off. 0% = kill switch. Flag name in the hash → independent groups.</li>
+    <li><code>./reset-all.sh</code> remove everything the demos created</li>
+  </ul></div>
+</section>

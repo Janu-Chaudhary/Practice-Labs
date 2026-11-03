@@ -18,7 +18,7 @@ out=$(docker run --rm -v "$APP_DIR/common:/t:ro" -w /t node:22-alpine node --tes
   || { echo "$out" | tail -15; fail "tests failed"; }
 echo "         $(echo "$out" | grep -E '^# pass' | awk '{print $3}') tests passed"
 
-ID=$(cd app && cat Dockerfile package.json common/*.js releases/"$REL"/* | shasum | cut -c1-7)
+ID=$(cd app && cat Dockerfile package.json common/*.js releases/"$REL"/* | { shasum 2>/dev/null || sha1sum; } | cut -c1-7)   # Linux note: sha1sum if no shasum (same SHA-1)
 echo "${B}[2/6] Build${N}         one image, tagged with the version and the code's id"
 show "docker build -t tiffingo:$REL -t tiffingo:$ID ."
 docker build -q --build-arg RELEASE="$REL" -t "tiffingo:$REL" -t "tiffingo:$ID" app >/dev/null || fail "build failed"
