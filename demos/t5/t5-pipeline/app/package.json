@@ -1,0 +1,5 @@
+{
+  "name": "tiffingo",
+  "private": true,
+  "dependencies": { "pg": "8.23.1" }
+}

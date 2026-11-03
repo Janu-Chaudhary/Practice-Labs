@@ -525,7 +525,8 @@ async function loadTheory(){
   const sec=doc.querySelector('#theory');if(!sec)throw new Error('no theory section');
   const T={topics:[],qs:[]};let topic=null;
   for(const el of sec.querySelectorAll('h3.sub, details.scenario')){
-    if(el.matches('h3.sub')){topic=el.id==='theory-facts'?null:{id:el.id,name:el.textContent.replace(/\s*\([^)]*\)\s*$/,'').trim(),qs:[]};if(topic)T.topics.push(topic);continue;}
+    if(el.matches('h3.sub')){const tag=(el.textContent.match(/\(([^)]*)\)\s*$/)||[])[1]||'';  // lecture tag, e.g. "T4L2"
+      topic=el.id==='theory-facts'?null:{id:el.id,name:el.textContent.replace(/\s*\([^)]*\)\s*$/,'').trim(),tag,qs:[]};if(topic)T.topics.push(topic);continue;}
     if(!topic)continue;
     const sum=el.querySelector(':scope>summary'),lv=sum.querySelector('.lvl');
     const body=el.querySelector(':scope>.body').cloneNode(true),ans=body.querySelector('details.answer');
@@ -542,7 +543,10 @@ async function loadTheory(){
   return T;
 }
 const tqRes=q=>tqState[q.id];
-function tqBuildList(){const pool=tqTopic==='all'?TQ.qs:TQ.qs.filter(q=>q.topic===tqTopic);
+// "This quiz": the subsections tagged with the current quiz's lectures (T4L1, T4L2, T5, T6)
+const SYLLABUS=/\bT[456]/;
+const syllabusQs=()=>TQ.topics.filter(t=>SYLLABUS.test(t.tag)).flatMap(t=>t.qs);
+function tqBuildList(){const pool=tqTopic==='all'?TQ.qs:tqTopic==='syllabus'?syllabusQs():TQ.qs.filter(q=>q.topic===tqTopic);
   tqList=pool.filter(q=>tqFilter==='all'||(tqFilter==='new'&&!tqRes(q))||(tqFilter==='wrong'&&tqRes(q)&&!tqRes(q).ok));}
 function renderTqSide(){
   const row=(id,name,qs)=>{const done=qs.filter(tqRes).length,ok=qs.filter(q=>tqRes(q)&&tqRes(q).ok).length;
@@ -550,6 +554,7 @@ function renderTqSide(){
   const side=$('#qside');
   side.innerHTML=`<div class="qfilter" role="group" aria-label="Which questions">${[['all','All'],['new','Not answered'],['wrong','Got wrong']]
       .map(([k,l])=>`<button class="btn${tqFilter===k?' primary':''}" data-f="${k}" aria-pressed="${tqFilter===k}">${l}</button>`).join('')}</div>`
+    +(syllabusQs().length?row('syllabus','📌 This quiz: T4–T6',syllabusQs()):'')
     +row('all','All topics',TQ.qs)+TQ.topics.map(t=>row(t.id,t.name,t.qs)).join('')
     +`<div class="legend"><button class="btn" id="tqReset">Reset scores</button></div>`;
   side.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tqTopic=b.dataset.t;tqBuildList();tqIdx=tqSavedIdx();renderTq();});
@@ -623,7 +628,8 @@ async function setMode(quiz){
   if(!TQ){$('#qmain').innerHTML='<div class="qcard empty">Loading questions…</div>';
     try{TQ=await loadTheory();}catch(e){$('#qmain').innerHTML='<div class="qcard empty">Could not load the questions from guide.html.</div>';return;}
     // reopen where the student left off
-    if(tqView.topic&&(tqView.topic==='all'||TQ.topics.some(t=>t.id===tqView.topic)))tqTopic=tqView.topic;
+    if(tqView.topic&&(tqView.topic==='all'||(tqView.topic==='syllabus'&&syllabusQs().length)||TQ.topics.some(t=>t.id===tqView.topic)))tqTopic=tqView.topic;
+    else if(!tqView.topic&&syllabusQs().length)tqTopic='syllabus';  // first visit: start on the current quiz's topics
     if(['all','new','wrong'].includes(tqView.filter))tqFilter=tqView.filter;
     tqBuildList();tqIdx=tqSavedIdx();}
   renderTq();
