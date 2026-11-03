@@ -1,0 +1,182 @@
+<section class="topic" id="delivery" data-title="Safe delivery">
+  <header class="topic-head">
+    <span class="tag">Topic T5</span>
+    <h2>Continuous safe delivery: build once, three ways back, code vs data</h2>
+    <p class="lede">Tag an image by commit id, roll back by redeploying, reverting or flipping a flag, and write migrations that make rollback safe.</p>
+  </header>
+
+  <div class="model"><h3>Mental model</h3>
+    <p>The pipeline runs in a fixed order: <b>Test, Build, Migrate, Deploy, Check health</b>. Build the image <b>once</b>, tag it with the commit id, and promote <i>that same image</i>. When production breaks there are <b>three ways back</b>, fastest first: <b>switch a flag off</b> (seconds, no deploy), <b>redeploy the previous image</b> (about 1 minute, nothing is rebuilt), and <b>revert the commit and run the pipeline again</b> (minutes, permanent). All three bring back <b>code</b>. None of them brings back <b>data</b>: a renamed or dropped column, deleted rows or a sent email stay as they are. <b>Code is reversible. Data is not.</b> So migrations must only <i>add</i> (expand), and must never break the old code that is still running.</p>
+  </div>
+
+  <!-- ===================== BUILD ONCE ===================== -->
+  <h3 class="sub" id="delivery-build">Build once, tag with the commit id</h3>
+  <p>A tag like <code>2.4</code> is for people. The commit id says exactly which code is inside the image. Commit <b>first</b>, then build, so that the id names the code you built. Use one build with two <code>-t</code>, or one build followed by <code>docker tag</code>. Building twice can give a different image, which means production would get something that was never tested.</p>
+  <div class="anatomy">
+    <code><span>docker build</span> <span>--build-arg RELEASE=2.4</span> <span>-t shop:2.4</span> <span>-t shop:$(git rev-parse --short HEAD)</span> <span>.</span></code>
+    <ol>
+      <li>build an image from ./Dockerfile</li>
+      <li>fills <code>ARG RELEASE</code> in the Dockerfile (an <code>ENV RELEASE=${RELEASE}</code> line keeps it in the image)</li>
+      <li>first name: the human version</li>
+      <li>second name: the shell runs <code>git rev-parse --short HEAD</code> first and puts its output (e.g. <code>b7d70c4</code>) here</li>
+      <li>the build context. It is required.</li>
+    </ol>
+  </div>
+  <table class="cmd"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+    <tr><td><code>git rev-parse --short HEAD</code></td><td>prints the short commit id (7 characters)</td></tr>
+    <tr><td><code>docker tag shop:2.4 shop:b7d70c4</code></td><td>adds a second name to the same image (no build)</td></tr>
+    <tr><td><code>docker image inspect -f '{{.Id}}' shop:2.4</code></td><td>the full image id; both tags must print the same one</td></tr>
+    <tr><td><code>docker image ls shop</code></td><td>both rows show the same IMAGE ID</td></tr>
+    <tr><td><code>docker image rm shop:wrongtag</code></td><td>removes only that name, as long as another tag still points at the image</td></tr>
+  </tbody></table>
+  <div class="callout trap"><strong>Trap</strong><p>If you build before you commit, the "commit id" tag names the <i>previous</i> commit. Fix it by committing, adding the right tag with <code>docker tag</code>, and removing the wrong one with <code>docker image rm</code>.</p></div>
+
+  <!-- ===================== REDEPLOY ===================== -->
+  <h3 class="sub" id="delivery-redeploy">Way back 1: redeploy the previous image</h3>
+  <p>The old image still exists, and it was tested when it was built. Start a container from it with the <b>same name, port and env</b>. There is no test, build or migration step, which is why this takes about 1 minute. It only works if the database still fits the old code.</p>
+  <pre class="term"><span class="p">$</span> docker logs web                         <span class="c"># evidence: ERROR ... request: /checkout?customer=kabir&amp;group=1</span>
+<span class="p">$</span> docker inspect -f '{{.Config.Env}}' web  <span class="c"># [STORE=pune PATH=... RELEASE=2.4]: copy only the -e you gave</span>
+<span class="p">$</span> docker port web                         <span class="c"># 3000/tcp -&gt; 127.0.0.1:8402</span>
+<span class="p">$</span> docker rm -f web                        <span class="c"># frees the name AND the port</span>
+<span class="p">$</span> docker run -d --name web -p 127.0.0.1:8402:3000 -e STORE=pune shop:2.3
+<span class="p">$</span> docker exec web wget -qO- http://localhost:3000/healthz     <span class="c"># no curl? ask from inside</span>
+{"status":"ok","version":"2.3","store":"pune"}</pre>
+  <div class="err"><pre>Conflict. The container name "/web" is already in use by container "3b1f..."</pre><p><b>Means:</b> the old container still exists, even if it is stopped.</p><p><b>Fix:</b> run <code>docker rm -f web</code> first. Don't pick a new name or port, because users and the proxy know the old ones.</p></div>
+  <div class="callout trap"><strong>Trap</strong><p>Don't copy <code>RELEASE=2.4</code> into a <code>-e</code>. It comes from the image, and overriding it would make 2.3 report itself as 2.4. Don't rebuild 2.3 either: a rebuild is slower and may not give the image that was tested. Keep the 2.4 image so the developers can reproduce the bug. Quote URLs that contain <code>&amp;</code>.</p></div>
+
+  <!-- ===================== REVERT ===================== -->
+  <h3 class="sub" id="delivery-revert">Way back 2: revert the commit (and ship it linearly)</h3>
+  <p><code>git revert</code> adds a <b>new</b> commit that undoes an old one. History only grows, so it is safe after a push, and the pipeline rebuilds from main. Use <code>reset</code> only for commits that were never pushed.</p>
+  <div class="anatomy">
+    <code><span>git revert</span> <span>--no-commit</span> <span>7d02b1f</span></code>
+    <ol><li>undo that commit's diff</li><li>stage the undo but don't commit yet, so you can choose the message</li><li>the bad commit (from <code>git log --oneline</code>)</li></ol>
+  </div>
+  <pre class="term"><span class="p">$</span> git revert --no-commit 7d02b1f
+<span class="p">$</span> git commit -m "Roll back group orders"     <span class="c"># exact message from the task</span>
+<span class="p">$</span> git push
+ ! [rejected]        main -&gt; main (fetch first)  <span class="c"># a teammate pushed meanwhile</span>
+<span class="p">$</span> git pull --rebase                           <span class="c"># fetch + replay MY commit on top: no merge commit</span>
+<span class="p">$</span> git push</pre>
+  <div class="callout trap"><strong>Trap</strong><p><code>git revert -m "msg"</code> is <b>not</b> "message". <code>-m</code> chooses a parent of a merge commit, and you get <code>option `mainline' expects a number</code>. A plain <code>git revert --no-edit</code> gives the message <code>Revert "..."</code>, so if the task asks for a different message, use <code>--no-commit</code> + <code>commit -m</code>, or <code>git commit --amend -m</code> before you push. A plain <code>git pull</code> creates a merge commit, which gives the wrong commit count and a history that isn't linear (Quiz 3 Q9).</p></div>
+  <div class="callout tip"><strong>Tip</strong><p>Q9 pattern: you have a local change and a teammate pushed. Do <code>git add</code>, <code>git commit -m "exact message"</code>, <code>git pull --rebase</code>, then <code>git push</code>. If you already made a merge commit, run <code>git reset --hard ORIG_HEAD</code> before you push, then run <code>pull --rebase</code>.</p></div>
+
+  <!-- ===================== FLAGS ===================== -->
+  <h3 class="sub" id="delivery-flags">Way back 3: the kill switch (feature flags)</h3>
+  <p>A flag is an <code>if</code> whose condition lives <b>outside the code</b>: in a file, a database row or a flag service. If the app reads it <b>on every request</b>, a change applies on the next request, with no deploy and no restart. The buggy code stays in the image but is never reached.</p>
+  <pre class="term"><span class="c"># flags.json (edit in the Files panel, save, done: no restart)</span>
+{
+  "group_order": { "rollout_percent": 0 },
+  "new_menu": { "rollout_percent": 50 }
+}
+<span class="p">$</span> docker exec web cat /flags/flags.json       <span class="c"># the container sees the same (mounted) file</span>
+<span class="p">$</span> docker ps                                   <span class="c"># still "Up 10 minutes": same container, never restarted</span></pre>
+  <p>In the lecture demo the flag is a database row: <code>UPDATE flags SET enabled = false WHERE name = 'group_order';</code></p>
+  <div class="callout trap"><strong>Trap</strong><p>Keep the file valid JSON: double quotes, numbers without quotes, and no trailing comma. Broken JSON breaks every request that reads it. Don't restart or re-create the container "to be safe": the task is graded on the container id and start time. If the app reads the flag only once at start-up, a change needs a restart, and then it is not a kill switch any more.</p></div>
+
+  <!-- ===================== PERCENT ===================== -->
+  <h3 class="sub" id="delivery-percent">Percentage rollout: sha256 bucket, not random()</h3>
+  <div class="anatomy">
+    <code><span>sha256("group_order:meena")</span> <span>first 4 bytes, big-endian</span> <span>% 100</span> <span>&lt; rollout_percent</span></code>
+    <ol>
+      <li>hash the flag name <b>and</b> the user, so each flag picks its own users</li>
+      <li>turn the hash into a number from 0 to 4,294,967,295 (JS <code>readUInt32BE(0)</code>, Python <code>int.from_bytes(d[:4], "big")</code>)</li>
+      <li>the remainder gives the bucket, 0-99 (meena = 5, asha = 67)</li>
+      <li>ON when the bucket is below the line. 0 = nobody (kill switch), 100 = everyone.</li>
+    </ol>
+  </div>
+  <pre class="term">import hashlib
+
+def bucket(flag, user):
+    digest = hashlib.sha256(f"{flag}:{user}".encode()).digest()
+    return int.from_bytes(digest[:4], "big") % 100
+
+def is_enabled(flag, user, percent):
+    return bucket(flag, user) &lt; percent</pre>
+  <ul>
+    <li><b>Sticky:</b> the same user always gets the same answer. With <code>random()</code> the button flickers on and off.</li>
+    <li><b>Monotonic:</b> going 10 → 50 → 100 only moves the line, so nobody loses the feature.</li>
+    <li><b>Salted:</b> with <code>hash(user)</code> alone, two flags at 10% hit the same 10% of users (978 of 978). With <code>flag:user</code>, about 1% of users get both (99).</li>
+  </ul>
+  <div class="callout trap"><strong>Trap</strong><p>Python's built-in <code>hash()</code> on strings changes on every run (it is randomised per process), so it isn't sticky. Use <code>&lt;</code>, not <code>&lt;=</code>: with <code>&lt;=</code>, 0% still turns the flag on for bucket 0. Compare with <code>percent</code>, not <code>percent/100</code>.</p></div>
+
+  <!-- ===================== DATA ===================== -->
+  <h3 class="sub" id="delivery-data">Code vs data: the rename trap and expand/contract</h3>
+  <p>The pipeline <b>migrates before it deploys</b>, so the old code is still serving while the migration runs. <code>RENAME COLUMN items TO order_items</code> breaks 2.3 straight away, and it stays broken <i>after a rollback</i>: <code>/healthz</code> says 2.3 is ok, but every checkout fails with <code>column "items" does not exist</code>. The only way out is forward, with a new migration that renames the column back.</p>
+  <pre class="term"><span class="c">-- V3__add_order_items.sql : EXPAND (additive only, old code unaffected)</span>
+ALTER TABLE orders ADD COLUMN order_items TEXT;
+UPDATE orders SET order_items = items WHERE order_items IS NULL;   <span class="c">-- backfill</span>
+<span class="c">-- no RENAME, no DROP. Later releases: write both, read new, use only new,</span>
+<span class="c">-- then CONTRACT: ALTER TABLE orders DROP COLUMN items;   &lt;- the irreversible point</span></pre>
+  <div class="callout trap"><strong>Trap</strong><p>Adding <code>ADD COLUMN ... NOT NULL</code> without a default fails on a table that has rows (SQLite: <code>Cannot add a NOT NULL column with default value NULL</code>), and it would break the old code's inserts. Make the new column nullable.</p></div>
+  <p><b>An applied migration was edited</b> (Quiz 3 Q10: <code>checksum mismatch for migration version 02</code>): put the file back to exactly what production ran, as its own commit. Don't write a migration for the edit.</p>
+  <pre class="term"><span class="p">$</span> git log --oneline -- migrations/V2__add_group_id.sql
+<span class="p">$</span> git restore --source=&lt;production commit&gt; migrations/V2__add_group_id.sql
+<span class="p">$</span> git add migrations/V2__add_group_id.sql
+<span class="p">$</span> git commit -m "Restore V2 to production version"</pre>
+
+  <!-- ===================== SCENARIOS ===================== -->
+  <details class="scenario"><summary><span class="lvl drill">Drill</span> Two tags, one image</summary>
+    <div class="body"><p>You committed "Release 2.6". Build <code>tiffingo:2.6</code> and <code>tiffingo:&lt;short id&gt;</code> with <code>RELEASE=2.6</code>, as one image.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">docker build --build-arg RELEASE=2.6 -t tiffingo:2.6 -t tiffingo:$(git rev-parse --short HEAD) .
+docker image ls tiffingo      <span class="c"># same IMAGE ID twice</span></pre><p>One build gives one image id. The commit-id tag tells you exactly which code is running.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Roll back, keep the config</summary>
+    <div class="body"><p><code>app</code> runs <code>app:2.4</code> with <code>-p 8080:3000 -e DB_URL=...</code> and fails. Roll back to <code>app:2.3</code> with the same name and port. Don't rebuild.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">docker inspect -f '{{.Config.Env}}' app     <span class="c"># copy DB_URL</span>
+docker rm -f app
+docker run -d --name app -p 8080:3000 -e DB_URL=... app:2.3</pre><p>Settings belong to the container, not the image, so read them before you remove it.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Revert with a message, teammate pushed first</summary>
+    <div class="body"><p>Undo the pushed commit "Add coupons" with message <code>Remove coupons</code>. Push. History must be linear, and you must not force-push.</p>
+      <details class="answer"><summary>Show answer</summary><pre class="term">git revert --no-commit &lt;hash&gt;
+git commit -m "Remove coupons"
+git push                 <span class="c"># rejected (fetch first)</span>
+git pull --rebase
+git push</pre><p>Don't use <code>-m</code> on revert. Don't use plain <code>pull</code>, because it makes a merge commit.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl quiz">Quiz-style</span> Which way back?</summary>
+    <div class="body"><p>"Split the bill" (behind a flag) charges the wrong friend. The rest of 2.5 is fine. What is the fastest fix?</p>
+      <details class="answer"><summary>Show answer</summary><p>Switch the flag off (rollout 0, or <code>enabled = false</code>). It takes seconds, there is no deploy, and everything else in 2.5 keeps running. Redeploying 2.4 would also remove the good parts of 2.5.</p></details>
+    </div></details>
+
+  <details class="scenario"><summary><span class="lvl twist">Twist</span> Healthy but 100% failing</summary>
+    <div class="body"><p>After you roll back to 2.3, <code>/healthz</code> says <code>ok, 2.3</code>, yet every checkout fails with <code>column "items" does not exist</code>. Why, and what is the fix?</p>
+      <details class="answer"><summary>Show answer</summary><p>The 2.4 migration renamed the column. The rollback restored the code but not the schema, and the health check only runs <code>SELECT 1</code>. To fix it forward, add a new migration: <code>ALTER TABLE orders RENAME COLUMN order_items TO items;</code>. Next time, use expand: add <code>order_items</code>, backfill it, and keep <code>items</code>.</p></details>
+    </div></details>
+
+  <!-- ===================== LABS ===================== -->
+  <div class="labs"><h3>Practice labs</h3><ul>
+    <li><label><input type="checkbox" data-id="delivery-01"> <code>labs/08-delivery/01-build-once-two-tags</code>
+      <span>Commit, then build one image tagged with the version and the commit id</span> <span class="lvl drill">Drill</span></label></li>
+    <li><label><input type="checkbox" data-id="delivery-02"> <code>labs/08-delivery/02-quiz-redeploy-previous-image</code>
+      <span>2.4 crashes kabir's group orders: redeploy 2.3 with the same name, port and env, no rebuild</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="delivery-03"> <code>labs/08-delivery/03-quiz-revert-and-rebase</code>
+      <span>Revert a pushed commit with an exact message, push rejected, pull --rebase, linear history</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="delivery-04"> <code>labs/08-delivery/04-quiz-kill-switch</code>
+      <span>Flag to 0 and another to 50 in flags.json, with no restart and the same container</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="delivery-05"> <code>labs/08-delivery/05-quiz-percent-rollout</code>
+      <span>Fix is_enabled: sha256(flag:user) bucket &lt; percent, pytest, commit</span> <span class="lvl quiz">Quiz-style</span></label></li>
+    <li><label><input type="checkbox" data-id="delivery-06"> <code>labs/08-delivery/06-twist-rename-trap</code>
+      <span>Restore an edited applied migration (Q10), then replace a RENAME with an expand migration</span> <span class="lvl twist">Twist</span></label></li>
+  </ul></div>
+
+  <div class="cheat"><h3>Cheat sheet</h3><ul>
+    <li><code>Test → Build → Migrate → Deploy → Check health</code> the pipeline order; one failure stops it</li>
+    <li><code>docker build --build-arg RELEASE=2.4 -t x:2.4 -t x:$(git rev-parse --short HEAD) .</code> build once, two tags</li>
+    <li><code>docker tag x:2.4 x:abc1234</code> add a name, no build</li>
+    <li><code>docker image inspect -f '{{.Id}}' x:2.4</code> compare image ids</li>
+    <li><code>docker inspect -f '{{.Config.Env}}' web</code> / <code>docker port web</code> read settings before removing</li>
+    <li><code>docker rm -f web &amp;&amp; docker run -d --name web -p H:C -e K=V x:2.3</code> redeploy the previous image</li>
+    <li><code>docker exec web wget -qO- "http://localhost:3000/healthz"</code> test from inside, with no curl</li>
+    <li><code>git revert --no-commit &lt;hash&gt;</code> + <code>git commit -m "..."</code> revert with your own message</li>
+    <li><code>git pull --rebase</code> after a rejected push: linear, no merge commit</li>
+    <li><code>git restore --source=&lt;hash&gt; path</code> put a file back to an old version, then commit</li>
+    <li>flags file / <code>UPDATE flags SET enabled=false</code> kill switch: seconds, no deploy, no restart</li>
+    <li><code>sha256(f"{flag}:{user}")[:4] big-endian % 100 &lt; percent</code> sticky percentage rollout</li>
+    <li><code>ADD COLUMN new TEXT; UPDATE t SET new = old;</code> expand + backfill. Never RENAME or DROP while old code runs.</li>
+    <li>Flag off (seconds) &lt; redeploy image (~1 min) &lt; revert + pipeline (minutes). None of them undoes data.</li>
+  </ul></div>
+</section>
